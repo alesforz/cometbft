@@ -33,6 +33,25 @@ func CanonicalizeBlockID(bid cmtproto.BlockID) *cmtproto.CanonicalBlockID {
 	return cbid
 }
 
+// CanonicalizeBlobID transforms the given BlobID to a CanonicalBlobID.
+func CanonicalizeBlobID(protoBlobID cmtproto.BlobID) *cmtproto.CanonicalBlobID {
+	blobID, err := BlobIDFromProto(&protoBlobID)
+	if err != nil {
+		panic(err)
+	}
+
+	if blobID.IsNil() {
+		return nil
+	}
+
+	canonBlobID := &cmtproto.CanonicalBlobID{
+		Hash:          protoBlobID.Hash,
+		PartSetHeader: CanonicalizePartSetHeader(protoBlobID.PartSetHeader),
+	}
+
+	return canonBlobID
+}
+
 // CanonicalizePartSetHeader transforms the given PartSetHeader to a CanonicalPartSetHeader.
 func CanonicalizePartSetHeader(psh cmtproto.PartSetHeader) cmtproto.CanonicalPartSetHeader {
 	return cmtproto.CanonicalPartSetHeader(psh)
@@ -48,6 +67,7 @@ func CanonicalizeProposal(chainID string, proposal *cmtproto.Proposal) cmtproto.
 		BlockID:   CanonicalizeBlockID(proposal.BlockID),
 		Timestamp: proposal.Timestamp,
 		ChainID:   chainID,
+		BlobID:    CanonicalizeBlobID(proposal.BlobID),
 	}
 }
 
