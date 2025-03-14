@@ -169,17 +169,19 @@ func (p *Proposal) ToProto() *cmtproto.Proposal {
 	if p == nil {
 		return &cmtproto.Proposal{}
 	}
-	pb := new(cmtproto.Proposal)
 
-	pb.BlockID = p.BlockID.ToProto()
-	pb.Type = p.Type
-	pb.Height = p.Height
-	pb.Round = p.Round
-	pb.PolRound = p.POLRound // FIXME: names do not match
-	pb.Timestamp = p.Timestamp
-	pb.Signature = p.Signature
+	protoProposal := &cmtproto.Proposal{
+		BlockID:   p.BlockID.ToProto(),
+		Type:      p.Type,
+		Height:    p.Height,
+		Round:     p.Round,
+		PolRound:  p.POLRound, // FIXME: names do not match
+		Timestamp: p.Timestamp,
+		Signature: p.Signature,
+		BlobID:    p.BlobID.ToProto(),
+	}
 
-	return pb
+	return protoProposal
 }
 
 // ProposalFromProto sets a protobuf Proposal to the given pointer.
@@ -189,20 +191,26 @@ func ProposalFromProto(pp *cmtproto.Proposal) (*Proposal, error) {
 		return nil, errors.New("nil proposal")
 	}
 
-	p := new(Proposal)
-
 	blockID, err := BlockIDFromProto(&pp.BlockID)
 	if err != nil {
 		return nil, err
 	}
 
-	p.BlockID = *blockID
-	p.Type = pp.Type
-	p.Height = pp.Height
-	p.Round = pp.Round
-	p.POLRound = pp.PolRound // FIXME: names do not match
-	p.Timestamp = pp.Timestamp
-	p.Signature = pp.Signature
+	blobID, err := BlobIDFromProto(&pp.BlobID)
+	if err != nil {
+		return nil, err
+	}
+
+	p := &Proposal{
+		BlockID:   *blockID,
+		Type:      pp.Type,
+		Height:    pp.Height,
+		Round:     pp.Round,
+		POLRound:  pp.PolRound, // FIXME: names do not match
+		Timestamp: pp.Timestamp,
+		Signature: pp.Signature,
+		BlobID:    blobID,
+	}
 
 	return p, p.ValidateBasic()
 }
