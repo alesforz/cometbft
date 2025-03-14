@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"time"
 
 	cmtproto "github.com/cometbft/cometbft/api/cometbft/types/v1"
@@ -18,7 +19,7 @@ const TimeFormat = time.RFC3339Nano
 func CanonicalizeBlockID(bid cmtproto.BlockID) *cmtproto.CanonicalBlockID {
 	rbid, err := BlockIDFromProto(&bid)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("error parsing BlockID from protobuf: %v", err))
 	}
 	var cbid *cmtproto.CanonicalBlockID
 	if rbid == nil || rbid.IsNil() {
@@ -37,7 +38,7 @@ func CanonicalizeBlockID(bid cmtproto.BlockID) *cmtproto.CanonicalBlockID {
 func CanonicalizeBlobID(protoBlobID cmtproto.BlobID) *cmtproto.CanonicalBlobID {
 	blobID, err := BlobIDFromProto(&protoBlobID)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("error parsing BlobID from protobuf: %v", err))
 	}
 
 	if blobID.IsNil() {

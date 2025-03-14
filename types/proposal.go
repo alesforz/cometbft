@@ -135,14 +135,14 @@ func (p *Proposal) IsTimely(recvTime time.Time, sp SynchronyParams) bool {
 // See BlockID#String.
 func (p *Proposal) String() string {
 	return fmt.Sprintf(
-		"Proposal{%v/%v (%v, %v) %X @ %s %v}",
+		"Proposal{%v/%v (%v, %v) (%v) %X @ %s}",
 		p.Height,
 		p.Round,
 		p.BlockID,
 		p.POLRound,
+		p.BlobID,
 		cmtbytes.Fingerprint(p.Signature),
 		CanonicalTime(p.Timestamp),
-		p.BlobID,
 	)
 }
 
