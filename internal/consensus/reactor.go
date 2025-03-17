@@ -341,6 +341,8 @@ func (conR *Reactor) Receive(e p2p.Envelope) {
 			ps.SetHasProposalBlockPart(msg.Height, msg.Round, int(msg.Part.Index))
 			conR.Metrics.BlockParts.With("peer_id", string(e.Src.ID())).Add(1)
 			conR.conS.peerMsgQueue <- msgInfo{msg, e.Src.ID(), time.Time{}}
+		case *BlobPartMessage:
+			// TODO
 		default:
 			conR.Logger.Error(fmt.Sprintf("Unknown message type %v", reflect.TypeOf(msg)))
 		}
@@ -1892,6 +1894,35 @@ func (m *BlockPartMessage) ValidateBasic() error {
 // String returns a string representation.
 func (m *BlockPartMessage) String() string {
 	return fmt.Sprintf("[BlockPart H:%v R:%v P:%v]", m.Height, m.Round, m.Part)
+}
+
+// -------------------------------------
+
+// BlobPartMessage is sent when gossipping a piece of the blob associated with the
+// block being proposed.
+type BlobPartMessage struct {
+	Height int64
+	Round  int32
+	Part   *types.Part
+}
+
+// ValidateBasic performs basic validation.
+func (m *BlobPartMessage) ValidateBasic() error {
+	if m.Height < 0 {
+		return cmterrors.ErrNegativeField{Field: "Height"}
+	}
+	if m.Round < 0 {
+		return cmterrors.ErrNegativeField{Field: "Round"}
+	}
+	if err := m.Part.ValidateBasic(); err != nil {
+		return cmterrors.ErrWrongField{Field: "Part", Err: err}
+	}
+	return nil
+}
+
+// String returns a string representation.
+func (m *BlobPartMessage) String() string {
+	return fmt.Sprintf("[BlobPart H:%v R:%v P:%v]", m.Height, m.Round, m.Part)
 }
 
 // -------------------------------------
