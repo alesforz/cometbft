@@ -322,6 +322,9 @@ func (conR *Reactor) Receive(e p2p.Envelope) {
 				ChannelID: VoteSetBitsChannel,
 				Message:   eMsg,
 			})
+
+		case *HasProposalBlobPartMessage:
+			// TODO
 		default:
 			conR.Logger.Error(fmt.Sprintf("Unknown message type %v", reflect.TypeOf(msg)))
 		}
@@ -2085,6 +2088,40 @@ func (m *HasProposalBlockPartMessage) String() string {
 	return fmt.Sprintf("[HasProposalBlockPart PI:%v HR:{%v/%02d}]", m.Index, m.Height, m.Round)
 }
 
+// -------------------------------------
+
+// HasProposalBlobPartMessage is sent to indicate that a particular blob part has been received.
+type HasProposalBlobPartMessage struct {
+	Height int64
+	Round  int32
+	Index  int32
+}
+
+// ValidateBasic performs basic validation.
+func (m *HasProposalBlobPartMessage) ValidateBasic() error {
+	if m.Height < 1 {
+		return cmterrors.ErrInvalidField{Field: "Height", Reason: "( < 1 )"}
+	}
+	if m.Round < 0 {
+		return cmterrors.ErrNegativeField{Field: "Round"}
+	}
+	if m.Index < 0 {
+		return cmterrors.ErrNegativeField{Field: "Index"}
+	}
+	return nil
+}
+
+// String returns a string representation.
+func (m *HasProposalBlobPartMessage) String() string {
+	str := fmt.Sprintf(
+		"[HasProposalBlobPart PI:%v HR:{%v/%02d}]",
+		m.Index,
+		m.Height,
+		m.Round,
+	)
+	return str
+}
+
 var (
 	_ types.Wrapper = &cmtcons.BlockPart{}
 	_ types.Wrapper = &cmtcons.HasVote{}
@@ -2096,4 +2133,6 @@ var (
 	_ types.Wrapper = &cmtcons.VoteSetBits{}
 	_ types.Wrapper = &cmtcons.VoteSetMaj23{}
 	_ types.Wrapper = &cmtcons.Commit{}
+	_ types.Wrapper = &cmtcons.BlobPart{}
+	_ types.Wrapper = &cmtcons.HasProposalBlobPart{}
 )
