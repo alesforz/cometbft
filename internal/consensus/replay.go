@@ -81,6 +81,13 @@ func (cs *State) readReplayMessage(msg *TimedWALMessage, newStepSub types.Subscr
 		case *CommitMessage:
 			c := msg.Commit
 			cs.Logger.Info("Replay: Commit", c.Height)
+		case *BlobPartMessage:
+			cs.Logger.Info(
+				"Replay: BlobPart",
+				"height", msg.Height,
+				"round", msg.Round,
+				"peer", peerID,
+			)
 		}
 		cs.handleMsg(m)
 	case timeoutInfo:
