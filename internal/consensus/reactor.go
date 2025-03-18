@@ -458,6 +458,20 @@ func (conR *Reactor) subscribeToBroadcastEvents() {
 		}); err != nil {
 		conR.Logger.Error("Error adding listener for events (ProposalBlockPart)", "err", err)
 	}
+
+	err := conR.conS.evsw.AddListenerForEvent(
+		subscriber,
+		types.EventProposalBlobPart,
+		func(data cmtevents.EventData) {
+			conR.broadcastHasProposalBlobPartMessage(data.(*BlobPartMessage))
+			conR.updateRoundStateNoCsLock()
+		})
+	if err != nil {
+		conR.Logger.Error(
+			"Error adding listener for events (ProposalBlobPart)",
+			"err", err,
+		)
+	}
 }
 
 func (conR *Reactor) unsubscribeFromBroadcastEvents() {
@@ -534,6 +548,21 @@ func (conR *Reactor) broadcastHasVoteMessage(vote *types.Vote) {
 // Broadcasts HasProposalBlockPartMessage to peers that care.
 func (conR *Reactor) broadcastHasProposalBlockPartMessage(partMsg *BlockPartMessage) {
 	msg := &cmtcons.HasProposalBlockPart{
+		Height: partMsg.Height,
+		Round:  partMsg.Round,
+		Index:  int32(partMsg.Part.Index),
+	}
+	go func() {
+		conR.Switch.TryBroadcast(p2p.Envelope{
+			ChannelID: StateChannel,
+			Message:   msg,
+		})
+	}()
+}
+
+// Broadcasts HasProposalBlobPartMessage to peers that care.
+func (conR *Reactor) broadcastHasProposalBlobPartMessage(partMsg *BlobPartMessage) {
+	msg := &cmtcons.HasProposalBlobPart{
 		Height: partMsg.Height,
 		Round:  partMsg.Round,
 		Index:  int32(partMsg.Part.Index),
