@@ -91,7 +91,7 @@ func TestMsgToProto(t *testing.T) {
 	protoBlkPart, err := blkPart.ToProto()
 	require.NoError(t, err)
 
-	protoBlobpart, err := blobPart.ToProto()
+	protoBlobPart, err := blobPart.ToProto()
 	require.NoError(t, err)
 
 	testsCases := []struct {
@@ -228,7 +228,7 @@ func TestMsgToProto(t *testing.T) {
 			wantProtoMsg: &cmtcons.BlobPart{
 				Height: 42,
 				Round:  1,
-				Part:   *protoBlobpart,
+				Part:   *protoBlobPart,
 			},
 			wantErr: false,
 		},

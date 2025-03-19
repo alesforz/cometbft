@@ -1087,7 +1087,7 @@ func (conR *Reactor) peerStatsRoutine() {
 					conR.Switch.MarkPeerAsGood(peer)
 				}
 			case *BlobPartMessage:
-				// TODO
+				ps.RecordBlobPart()
 			}
 
 		case <-conR.conS.Quit():
