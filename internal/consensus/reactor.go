@@ -459,6 +459,7 @@ func (conR *Reactor) subscribeToBroadcastEvents() {
 		conR.Logger.Error("Error adding listener for events (ProposalBlockPart)", "err", err)
 	}
 
+	// TODO: add FireEvent call for this message type where appropriate.
 	err := conR.conS.evsw.AddListenerForEvent(
 		subscriber,
 		types.EventProposalBlobPart,
