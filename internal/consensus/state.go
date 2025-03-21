@@ -141,6 +141,10 @@ type State struct {
 	// a buffer to store the concatenated proposal block parts (serialization format)
 	// should only be accessed under the cs.mtx lock
 	serializedBlockBuffer []byte
+
+	// a buffer to store the concatenated proposal blob parts (serialization format)
+	// should only be accessed under the cs.mtx lock
+	serializedBlobBuffer []byte
 }
 
 // StateOption sets an optional parameter on the State.
@@ -917,7 +921,7 @@ func (cs *State) handleMsg(mi msgInfo) {
 		cs.mtx.Unlock()
 
 		cs.mtx.Lock()
-		if added && cs.ProposalBlockParts.IsComplete() {
+		if added && cs.ProposalBlockParts.IsComplete() && cs.ProposalBlobParts.IsComplete() {
 			cs.handleCompleteProposal(msg.Height)
 		}
 		if added {
@@ -968,7 +972,39 @@ func (cs *State) handleMsg(mi msgInfo) {
 			cs.Logger.Error("Failed to add commit ", "commit", msg.Commit, "err", err)
 		}
 	case *BlobPartMessage:
-		// TODO
+		// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
+		added, err = cs.addProposalBlobPart(msg, peerID)
+
+		// We unlock here to yield to any routines that need to read the the RoundState.
+		// Previously, this code held the lock from the point at which the final block
+		// part was received until the block executed against the application.
+		// This prevented the reactor from being able to retrieve the most updated
+		// version of the RoundState. The reactor needs the updated RoundState to
+		// gossip the now completed block.
+		//
+		// This code can be further improved by either always operating on a copy
+		// of RoundState and only locking when switching out State's copy of
+		// RoundState with the updated copy or by emitting RoundState events in
+		// more places for routines depending on it to listen for.
+		cs.mtx.Unlock()
+
+		cs.mtx.Lock()
+		if added && cs.ProposalBlockParts.IsComplete() && cs.ProposalBlobParts.IsComplete() {
+			cs.handleCompleteProposal(msg.Height)
+		}
+		if added {
+			cs.statsMsgQueue <- mi
+		}
+
+		if err != nil && msg.Round != cs.Round {
+			cs.Logger.Debug(
+				"Received blob part from wrong round",
+				"height", cs.Height,
+				"cs_round", cs.Round,
+				"block_round", msg.Round,
+			)
+			err = nil
+		}
 
 	default:
 		cs.Logger.Error("Unknown msg type", "type", fmt.Sprintf("%T", msg))
@@ -2280,6 +2316,27 @@ func (cs *State) readSerializedBlockFromBlockParts() ([]byte, error) {
 	return serializedBlockBuffer, nil
 }
 
+func (cs *State) readSerializedBlobFromBlobParts() ([]byte, error) {
+	// reuse a serialized block buffer from cs
+	var serializedBlobBuffer []byte
+	if len(cs.serializedBlobBuffer) < int(cs.ProposalBlobParts.ByteSize()) {
+		serializedBlobBuffer = make([]byte, cs.ProposalBlobParts.ByteSize())
+		cs.serializedBlobBuffer = serializedBlobBuffer
+	} else {
+		serializedBlobBuffer = cs.serializedBlobBuffer[:cs.ProposalBlobParts.ByteSize()]
+	}
+
+	n, err := io.ReadFull(cs.ProposalBlobParts.GetReader(), serializedBlobBuffer)
+	if err != nil {
+		return nil, err
+	}
+	// Consistency check, should be impossible to fail.
+	if n != len(serializedBlobBuffer) {
+		return nil, fmt.Errorf("unexpected error in reading blob parts, expected to read %d bytes, read %d", len(serializedBlobBuffer), n)
+	}
+	return serializedBlobBuffer, nil
+}
+
 // NOTE: block is not necessarily valid.
 // Asynchronously triggers either enterPrevote (before we timeout of propose) or tryFinalizeCommit,
 // once we have the full block.
@@ -2338,7 +2395,7 @@ func (cs *State) addProposalBlockPart(msg *BlockPartMessage, peerID p2p.ID) (add
 			cs.ProposalBlockParts.ByteSize(), maxBytes,
 		)
 	}
-	if added && cs.ProposalBlockParts.IsComplete() {
+	if added && cs.ProposalBlockParts.IsComplete() && cs.ProposalBlobParts.IsComplete() {
 		bz, err := cs.readSerializedBlockFromBlockParts()
 		if err != nil {
 			return added, err
@@ -2359,6 +2416,99 @@ func (cs *State) addProposalBlockPart(msg *BlockPartMessage, peerID p2p.ID) (add
 
 		// NOTE: it's possible to receive complete proposal blocks for future rounds without having the proposal
 		cs.Logger.Info("Received complete proposal block", "height", cs.ProposalBlock.Height, "hash", cs.ProposalBlock.Hash())
+
+		if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
+			cs.Logger.Error("Failed publishing event complete proposal", "err", err)
+		}
+	}
+	return added, nil
+}
+
+// NOTE: blob is unvalidated bytes.
+// Asynchronously triggers either enterPrevote (before we timeout of propose) or tryFinalizeCommit,
+// once we have the full block. <- TODO: wrong
+func (cs *State) addProposalBlobPart(msg *BlobPartMessage, peerID p2p.ID) (added bool, err error) {
+	height, round, part := msg.Height, msg.Round, msg.Part
+
+	// Blobs might be reused, so round mismatch is OK
+	if cs.Height != height {
+		cs.Logger.Debug("Received blob part from wrong height", "height", height, "round", round)
+		// Todo: Implement metrics
+		//cs.metrics.BlobGossipPartsReceived.With("matches_current", "false").Add(1)
+		return false, nil
+	}
+
+	// We're not expecting a blob part.
+	if cs.ProposalBlobParts == nil {
+		// Todo: Implement metrics
+		//cs.metrics.BlobGossipPartsReceived.With("matches_current", "false").Add(1)
+		// NOTE: this can happen when we've gone to a higher round and
+		// then receive parts from the previous round - not necessarily a bad peer.
+		cs.Logger.Debug(
+			"Received a blob part when we are not expecting any",
+			"height", height,
+			"round", round,
+			"index", part.Index,
+			"peer", peerID,
+		)
+		return false, nil
+	}
+
+	added, err = cs.ProposalBlobParts.AddPart(part)
+	if err != nil {
+		// Todo: Implement metrics
+		//if errors.Is(err, types.ErrPartSetInvalidProof) || errors.Is(err, types.ErrPartSetUnexpectedIndex) {
+		//	cs.metrics.BlobGossipPartsReceived.With("matches_current", "false").Add(1)
+		//}
+		return added, err
+	}
+
+	// Todo: Implement metrics
+	//cs.metrics.BlobGossipPartsReceived.With("matches_current", "true").Add(1)
+	if !added {
+		// NOTE: we are disregarding possible duplicates above where heights dont match or we're not expecting blob parts yet
+		// but between the matches_current = true and false, we have all the info.
+		// Todo: Implement metrics
+		//cs.metrics.DuplicateBlobPart.Add(1)
+	} else {
+		cs.evsw.FireEvent(types.EventProposalBlobPart, msg)
+	}
+
+	count, total := cs.ProposalBlobParts.Count(), cs.ProposalBlobParts.Total()
+	cs.Logger.Debug("Receive blob part", "height", height, "round", round,
+		"index", part.Index, "count", count, "total", total, "from", peerID)
+
+	// Todo: Implement blob configuration
+	//maxBytes := cs.state.ConsensusParams.Blob.MaxBytes
+	//if maxBytes == -1 {
+	//	maxBytes = int64(types.MaxBlockSizeBytes)
+	//}
+	//if cs.ProposalBlockParts.ByteSize() > maxBytes {
+	//	return added, fmt.Errorf("total size of proposal block parts exceeds maximum block bytes (%d > %d)",
+	//		cs.ProposalBlockParts.ByteSize(), maxBytes,
+	//	)
+	//}
+	if added && cs.ProposalBlockParts.IsComplete() && cs.ProposalBlobParts.IsComplete() {
+		bz, err := cs.readSerializedBlobFromBlobParts()
+		if err != nil {
+			return added, err
+		}
+
+		pbb := new(cmtproto.Blob)
+		err = proto.Unmarshal(bz, pbb)
+		if err != nil {
+			return added, err
+		}
+
+		blob, err := types.BlobFromProto(pbb)
+		if err != nil {
+			return added, err
+		}
+
+		cs.ProposalBlob = blob
+
+		// NOTE: it's possible to receive complete proposal blobs for future rounds without having the proposal
+		cs.Logger.Info("Received complete proposal blob", "hash", cs.ProposalBlob.Hash())
 
 		if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
 			cs.Logger.Error("Failed publishing event complete proposal", "err", err)

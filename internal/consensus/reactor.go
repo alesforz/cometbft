@@ -324,7 +324,7 @@ func (conR *Reactor) Receive(e p2p.Envelope) {
 			})
 
 		case *HasProposalBlobPartMessage:
-			// TODO
+			ps.ApplyHasProposalBlobPartMessage(msg)
 		default:
 			conR.Logger.Error(fmt.Sprintf("Unknown message type %v", reflect.TypeOf(msg)))
 		}
@@ -1270,6 +1270,21 @@ func (ps *PeerState) setHasProposalBlockPart(height int64, round int32, index in
 	ps.PRS.ProposalBlockParts.SetIndex(index, true)
 }
 
+func (ps *PeerState) setHasProposalBlobPart(height int64, round int32, index int) {
+	ps.logger.Debug("setHasProposalBlobPart",
+		"peerH/R",
+		log.NewLazySprintf("%d/%d", ps.PRS.Height, ps.PRS.Round),
+		"H/R",
+		log.NewLazySprintf("%d/%d", height, round),
+		"index", index)
+
+	if ps.PRS.Height != height || ps.PRS.Round != round {
+		return
+	}
+
+	ps.PRS.ProposalBlobParts.SetIndex(index, true)
+}
+
 // SendPartSetHasPart sends the part to the peer.
 // Returns true and marks the peer as having the part if the part was sent.
 func (ps *PeerState) SendPartSetHasPart(part *types.Part, prs *cstypes.PeerRoundState) bool {
@@ -1703,6 +1718,18 @@ func (ps *PeerState) ApplyHasProposalBlockPartMessage(msg *HasProposalBlockPartM
 	}
 
 	ps.setHasProposalBlockPart(msg.Height, msg.Round, int(msg.Index))
+}
+
+// ApplyHasProposalBlobPartMessage updates the peer state for the new blob part.
+func (ps *PeerState) ApplyHasProposalBlobPartMessage(msg *HasProposalBlobPartMessage) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	if ps.PRS.Height != msg.Height {
+		return
+	}
+
+	ps.setHasProposalBlobPart(msg.Height, msg.Round, int(msg.Index))
 }
 
 // ApplyVoteSetBitsMessage updates the peer state for the bit-array of votes
