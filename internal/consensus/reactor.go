@@ -666,6 +666,22 @@ OUTER_LOOP:
 		}
 
 		// --------------------
+		// Send blob part?
+		// (Note these can match on hash so round doesn't matter)
+		// --------------------
+
+		if part, continueLoop := pickBlobPartToSend(rs, prs, rng); part != nil {
+			// part is not nil: we either succeed in sending it,
+			// or we were instructed not to sleep (busy-waiting)
+			if ps.SendPartSetHasPart(part, prs) || continueLoop {
+				continue OUTER_LOOP
+			}
+		} else if continueLoop {
+			// part is nil but we don't want to sleep (busy-waiting)
+			continue OUTER_LOOP
+		}
+
+		// --------------------
 		// Send proposal?
 		// (If height and round match, and we have a proposal and they don't)
 		// --------------------
@@ -902,6 +918,28 @@ func pickPartToSend(
 			return part, false
 		}
 	}
+
+	return nil, false
+}
+
+// pick a blob part to send if the peer has the same part set header as us or if they're catching up and we have the block.
+// returns the part and a bool that signals whether to continue to the loop (true) or to sleep.
+// NOTE there is one case where we don't return a part but continue the loop (ie. we return (nil, true)).
+func pickBlobPartToSend(
+	rs *cstypes.RoundState,
+	prs *cstypes.PeerRoundState,
+	rng *rand.Rand,
+) (*types.Part, bool) {
+	// If peer has same part set header as us, send blob parts
+	if rs.ProposalBlobParts.HasHeader(prs.ProposalBlobPartSetHeader) {
+		if index, ok := rs.ProposalBlobParts.BitArray().Sub(prs.ProposalBlobParts.Copy()).PickRandom(rng); ok {
+			part := rs.ProposalBlobParts.GetPart(index)
+			// If sending this part fails, restart the OUTER_LOOP (busy-waiting).
+			return part, true
+		}
+	}
+
+	// Todo: If the peer is on a previous height that we have, help catch up.
 
 	return nil, false
 }
