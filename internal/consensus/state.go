@@ -2399,7 +2399,7 @@ func (cs *State) addProposalBlockPart(msg *BlockPartMessage, peerID p2p.ID) (add
 			cs.ProposalBlockParts.ByteSize(), maxBytes,
 		)
 	}
-	if added && cs.ProposalBlockParts.IsComplete() && cs.ProposalBlobParts.IsComplete() {
+	if added && cs.ProposalBlockParts.IsComplete() {
 		bz, err := cs.readSerializedBlockFromBlockParts()
 		if err != nil {
 			return added, err
@@ -2421,8 +2421,11 @@ func (cs *State) addProposalBlockPart(msg *BlockPartMessage, peerID p2p.ID) (add
 		// NOTE: it's possible to receive complete proposal blocks for future rounds without having the proposal
 		cs.Logger.Info("Received complete proposal block", "height", cs.ProposalBlock.Height, "hash", cs.ProposalBlock.Hash())
 
-		if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
-			cs.Logger.Error("Failed publishing event complete proposal", "err", err)
+		// Both blocks and blobs need to be complete to fire the event.
+		if cs.ProposalBlobParts.IsComplete() {
+			if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
+				cs.Logger.Error("Failed publishing event complete proposal", "err", err)
+			}
 		}
 	}
 	return added, nil
@@ -2492,7 +2495,7 @@ func (cs *State) addProposalBlobPart(msg *BlobPartMessage, peerID p2p.ID) (added
 	//		cs.ProposalBlockParts.ByteSize(), maxBytes,
 	//	)
 	//}
-	if added && cs.ProposalBlockParts.IsComplete() && cs.ProposalBlobParts.IsComplete() {
+	if added && cs.ProposalBlockParts.IsComplete() {
 		bz, err := cs.readSerializedBlobFromBlobParts()
 		if err != nil {
 			return added, err
@@ -2514,8 +2517,11 @@ func (cs *State) addProposalBlobPart(msg *BlobPartMessage, peerID p2p.ID) (added
 		// NOTE: it's possible to receive complete proposal blobs for future rounds without having the proposal
 		cs.Logger.Info("Received complete proposal blob", "hash", cs.ProposalBlob.Hash())
 
-		if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
-			cs.Logger.Error("Failed publishing event complete proposal", "err", err)
+		// Both blocks and blobs need to be complete to fire the event.
+		if cs.ProposalBlockParts.IsComplete() {
+			if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
+				cs.Logger.Error("Failed publishing event complete proposal", "err", err)
+			}
 		}
 	}
 	return added, nil
