@@ -336,7 +336,7 @@ func (ps *PartSet) GetPart(index int) *Part {
 }
 
 func (ps *PartSet) IsComplete() bool {
-	return ps.count == ps.total
+	return ps == nil || ps.count == ps.total
 }
 
 func (ps *PartSet) GetReader() io.Reader {
