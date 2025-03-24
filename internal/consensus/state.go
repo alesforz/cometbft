@@ -749,6 +749,8 @@ func (cs *State) updateToState(state sm.State) {
 	cs.ProposalReceiveTime = time.Time{}
 	cs.ProposalBlock = nil
 	cs.ProposalBlockParts = nil
+	cs.ProposalBlob = nil
+	cs.ProposalBlobParts = nil
 	cs.LockedRound = -1
 	cs.LockedBlock = nil
 	cs.LockedBlockParts = nil

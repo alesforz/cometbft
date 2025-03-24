@@ -3410,3 +3410,32 @@ func TestReadSerializedBlockFromBlockParts(t *testing.T) {
 		}
 	}
 }
+
+// TestReadSerializedBlobFromBlobParts tests that the readSerializedBlobFromBlobParts function
+// reads the block correctly from the blob parts.
+func TestReadSerializedBlobFromBlobParts(t *testing.T) {
+	sizes := []int{0, 5, 64, 70, 128, 200}
+
+	// iterate through many initial buffer sizes and new block sizes.
+	// (Skip new block size = 0, as that is not valid construction)
+	// Ensure that we read back the correct block size, and the buffer is resized correctly.
+	for i := 0; i < len(sizes); i++ {
+		for j := 1; j < len(sizes); j++ {
+			initialSize, newBlobSize := sizes[i], sizes[j]
+			testName := fmt.Sprintf("initialSize=%d,newBlockSize=%d", initialSize, newBlobSize)
+			t.Run(testName, func(t *testing.T) {
+				blobData := cmtrand.Bytes(newBlobSize)
+				ps := types.NewPartSetFromData(blobData, 64)
+				cs := &State{
+					serializedBlobBuffer: make([]byte, initialSize),
+				}
+				cs.ProposalBlobParts = ps
+
+				serializedBlob, err := cs.readSerializedBlobFromBlobParts()
+				require.NoError(t, err)
+				require.Equal(t, blobData, serializedBlob)
+				require.Equal(t, len(cs.serializedBlobBuffer), max(initialSize, newBlobSize))
+			})
+		}
+	}
+}
