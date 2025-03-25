@@ -676,7 +676,7 @@ OUTER_LOOP:
 		if part, continueLoop := pickBlobPartToSend(rs, prs, rng); part != nil {
 			// part is not nil: we either succeed in sending it,
 			// or we were instructed not to sleep (busy-waiting)
-			if ps.SendPartSetHasPart(part, prs) || continueLoop {
+			if ps.SendBlobPartSetHasBlobPart(part, prs) || continueLoop {
 				continue OUTER_LOOP
 			}
 		} else if continueLoop {
@@ -1355,6 +1355,32 @@ func (ps *PeerState) SendPartSetHasPart(part *types.Part, prs *cstypes.PeerRound
 		return true
 	}
 	ps.logger.Debug("Sending block part failed")
+	return false
+}
+
+// SendBlobPartSetHasBlobPart sends the blob part to the peer.
+// Returns true and marks the peer as having the blob part if the blob part was sent.
+func (ps *PeerState) SendBlobPartSetHasBlobPart(part *types.Part, prs *cstypes.PeerRoundState) bool {
+	// Send the blob part
+	ps.logger.Debug("Sending blob part", "height", prs.Height, "round", prs.Round, "index", part.Index)
+	pp, err := part.ToProto()
+	if err != nil {
+		// NOTE: only returns error if part is nil, which it should never be by here
+		ps.logger.Error("Could not convert blob part to proto", "index", part.Index, "error", err)
+		return false
+	}
+	if ps.peer.Send(p2p.Envelope{
+		ChannelID: DataChannel,
+		Message: &cmtcons.BlobPart{
+			Height: prs.Height, // Not our height, so it doesn't matter.
+			Round:  prs.Round,  // Not our height, so it doesn't matter.
+			Part:   *pp,
+		},
+	}) {
+		ps.SetHasProposalBlobPart(prs.Height, prs.Round, int(part.Index))
+		return true
+	}
+	ps.logger.Debug("Sending blob part failed")
 	return false
 }
 
