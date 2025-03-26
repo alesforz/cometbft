@@ -20,7 +20,7 @@ import (
 	cmterrors "github.com/cometbft/cometbft/types/errors"
 )
 
-// Assuming the length of a block part is 64kB (`types.BlockPartSizeBytes`),
+// Assuming the length of a block part is 64kB (`types.PartSizeBytes`),
 // the maximum size of a block, that will be batch saved, is 640kB. The
 // benchmarks have shown that `goleveldb` still performs well with blocks of
 // this size. However, if the block is larger than 1MB, the performance degrades.

@@ -240,7 +240,7 @@ func createProposalBlockWithTime(t *testing.T, cs *State, time time.Time) (*type
 		block.Time = cmttime.Canonical(time)
 	}
 	assert.NoError(t, err)
-	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	blockParts, err := block.MakePartSet(types.PartSizeBytes)
 	assert.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
 	return block, blockParts, blockID
