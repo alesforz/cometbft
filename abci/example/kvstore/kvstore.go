@@ -48,6 +48,9 @@ type Application struct {
 	// If true, the app will generate block events in BeginBlock. Used to test the event indexer
 	// Should be false by default to avoid generating too much data.
 	genBlockEvents bool
+
+	// Generate blobs
+	generateBlobs bool
 }
 
 // NewApplication creates an instance of the kvstore from the provided database.
@@ -77,6 +80,10 @@ func NewInMemoryApplication() *Application {
 
 func (app *Application) SetGenBlockEvents() {
 	app.genBlockEvents = true
+}
+
+func (app *Application) SetGenerateBlobs() {
+	app.generateBlobs = true
 }
 
 // Info returns information about the state of the application. This is generally used every time a Tendermint instance
@@ -161,6 +168,10 @@ func isValidTx(tx []byte) bool {
 // quite a trivial example of transaction modification.
 // NOTE: we assume that CometBFT will never provide more transactions than can fit in a block.
 func (app *Application) PrepareProposal(ctx context.Context, req *types.PrepareProposalRequest) (*types.PrepareProposalResponse, error) {
+
+	if app.generateBlobs {
+		return &types.PrepareProposalResponse{Txs: app.formatTxs(ctx, req.Txs), Blob: []byte("hiBlob")}, nil
+	}
 	return &types.PrepareProposalResponse{Txs: app.formatTxs(ctx, req.Txs)}, nil
 }
 
@@ -192,6 +203,10 @@ func (app *Application) ProcessProposal(ctx context.Context, req *types.ProcessP
 		if resp.Code != CodeTypeOK {
 			return &types.ProcessProposalResponse{Status: types.PROCESS_PROPOSAL_STATUS_REJECT}, nil
 		}
+	}
+
+	if app.generateBlobs && !bytes.Equal(req.Blob, []byte("hiBlob")) {
+		return &types.ProcessProposalResponse{Status: types.PROCESS_PROPOSAL_STATUS_REJECT}, nil
 	}
 	return &types.ProcessProposalResponse{Status: types.PROCESS_PROPOSAL_STATUS_ACCEPT}, nil
 }

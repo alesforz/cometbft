@@ -3281,7 +3281,12 @@ func TestStateTimestamp_ProposalMatch(t *testing.T) {
 	addr := pv1.Address()
 	voteCh := subscribeToVoter(cs1, addr)
 
-	propBlock, propBlockParts, blockID := createProposalBlock(t, cs1)
+	propBlock, propBlockParts, blockID, blob := createProposalBlockAndBlob(t, cs1)
+
+	assert.NoError(t, err)
+	blobParts := types.NewPartSetFromData(blob, types.PartSizeBytes)
+
+	blobID := types.BlobID{Hash: blob.Hash(), PartSetHeader: blobParts.Header()}
 
 	round++
 	incrementRound(vss[1:]...)
@@ -3293,13 +3298,13 @@ func TestStateTimestamp_ProposalMatch(t *testing.T) {
 		-1, /* POLRound */
 		blockID,
 		propBlock.Header.Time,
-		types.BlobID{},
+		blobID,
 	)
 	signProposal(t, proposal, chainID, vs2)
-	require.NoError(t, cs1.SetProposalAndBlock(proposal, propBlockParts, "some peer"))
+	require.NoError(t, cs1.SetProposalBlobAndBlock(proposal, propBlockParts, blobParts, "some peer"))
 
 	startTestRound(cs1, height, round)
-	ensureProposal(proposalCh, height, round, blockID)
+	ensureProposalWithBlob(proposalCh, height, round, blockID, blobID)
 
 	signAddVotes(cs1, types.PrevoteType, chainID, blockID, false, vs2, vs3, vs4)
 
