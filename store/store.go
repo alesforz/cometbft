@@ -20,7 +20,7 @@ import (
 	cmterrors "github.com/cometbft/cometbft/types/errors"
 )
 
-// Assuming the length of a block part is 64kB (`types.PartSizeBytes`),
+// Assuming the length of a block part is 64kB (`types.BlockPartSizeBytes`),
 // the maximum size of a block, that will be batch saved, is 640kB. The
 // benchmarks have shown that `goleveldb` still performs well with blocks of
 // this size. However, if the block is larger than 1MB, the performance degrades.
@@ -305,7 +305,7 @@ func (bs *BlockStore) LoadBlockPart(height int64, index int) *types.Part {
 	if err != nil {
 		panic(fmt.Errorf("unmarshal to cmtproto.Part failed: %w", err))
 	}
-	part, err = types.PartFromProto(pbpart)
+	part, err = types.PartFromProto(pbpart, types.PartSetTypeBlock)
 	if err != nil {
 		panic(fmt.Sprintf("Error reading block part: %v", err))
 	}

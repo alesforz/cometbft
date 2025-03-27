@@ -215,7 +215,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		block, _, err := lazyProposer.blockExec.CreateProposalBlock(
 			ctx, lazyProposer.Height, lazyProposer.state, extCommit, proposerAddr)
 		require.NoError(t, err)
-		blockParts, err := block.MakePartSet(types.PartSizeBytes)
+		blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 		require.NoError(t, err)
 
 		// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,
