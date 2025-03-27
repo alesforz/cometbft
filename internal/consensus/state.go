@@ -517,6 +517,47 @@ func (cs *State) AddProposalBlockPart(height int64, round int32, part *types.Par
 	return nil
 }
 
+// AddProposalBlockPart inputs a part of the proposal block.
+func (cs *State) AddProposalBlobPart(height int64, round int32, part *types.Part, peerID p2p.ID) error {
+	if peerID == "" {
+		cs.internalMsgQueue <- msgInfo{&BlobPartMessage{height, round, part}, "", time.Time{}}
+	} else {
+		cs.peerMsgQueue <- msgInfo{&BlobPartMessage{height, round, part}, peerID, time.Time{}}
+	}
+
+	// TODO: wait for event?!
+	return nil
+}
+
+// SetProposalBlockAndBlob inputs the proposal and all block parts.
+func (cs *State) SetProposalBlobAndBlock(
+	proposal *types.Proposal,
+	blockParts *types.PartSet,
+	blobParts *types.PartSet,
+	peerID p2p.ID,
+) error {
+	// TODO: Since the block parameter is not used, we should instead expose just a SetProposal method.
+	if err := cs.SetProposal(proposal, peerID); err != nil {
+		return err
+	}
+
+	for i := 0; i < int(blockParts.Total()); i++ {
+		part := blockParts.GetPart(i)
+		if err := cs.AddProposalBlockPart(proposal.Height, proposal.Round, part, peerID); err != nil {
+			return err
+		}
+	}
+
+	for i := 0; i < int(blobParts.Total()); i++ {
+		part := blobParts.GetPart(i)
+		if err := cs.AddProposalBlobPart(proposal.Height, proposal.Round, part, peerID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // SetProposalAndBlock inputs the proposal and all block parts.
 func (cs *State) SetProposalAndBlock(
 	proposal *types.Proposal,
@@ -2506,23 +2547,14 @@ func (cs *State) addProposalBlobPart(msg *BlobPartMessage, peerID p2p.ID) (added
 	//	)
 	//}
 	if added && cs.ProposalBlobParts.IsComplete() {
-		bz, err := cs.readSerializedBlobFromBlobParts()
+
+		serializeBlob, err := cs.readSerializedBlobFromBlobParts()
 		if err != nil {
 			return added, err
 		}
 
-		pbb := new(cmtproto.Blob)
-		err = proto.Unmarshal(bz, pbb)
-		if err != nil {
-			return added, err
-		}
-
-		blob, err := types.BlobFromProto(pbb)
-		if err != nil {
-			return added, err
-		}
-
-		cs.ProposalBlob = blob
+		// We do not need to  proto decode the blob as it is bytes.
+		cs.ProposalBlob = serializeBlob
 
 		// NOTE: it's possible to receive complete proposal blobs for future rounds without having the proposal
 		cs.Logger.Info("Received complete proposal blob", "hash", cs.ProposalBlob.Hash())
