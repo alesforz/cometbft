@@ -848,7 +848,7 @@ func (cs *State) receiveRoutine(maxSteps int) {
 			if err := cs.wal.Write(mi); err != nil {
 				cs.Logger.Error("Failed writing to WAL", "err", err)
 			}
-			// handles proposals, block parts, blob parts, votes
+			// handles proposals, block parts, votes
 			// may generate internal events (votes, complete proposals, 2/3 majorities)
 			cs.handleMsg(mi)
 
@@ -869,7 +869,7 @@ func (cs *State) receiveRoutine(maxSteps int) {
 				fail.Fail() // XXX
 			}
 
-			// handles proposals, block parts, blob parts, votes
+			// handles proposals, block parts, votes
 			cs.handleMsg(mi)
 
 		case ti := <-cs.timeoutTicker.Chan(): // tockChan:
@@ -923,7 +923,7 @@ func (cs *State) handleMsg(mi msgInfo) {
 		cs.mtx.Unlock()
 
 		cs.mtx.Lock()
-		if added && cs.ProposalBlockParts.IsComplete() && (cs.Proposal.BlobID.IsNil() || cs.ProposalBlob != nil) {
+		if added && cs.ProposalBlockParts.IsComplete() && cs.ProposalBlobParts.IsComplete() {
 			cs.handleCompleteProposal(msg.Height)
 		}
 		if added {
@@ -991,7 +991,7 @@ func (cs *State) handleMsg(mi msgInfo) {
 		cs.mtx.Unlock()
 
 		cs.mtx.Lock()
-		if added && cs.ProposalBlobParts.IsComplete() && cs.ProposalBlockParts.IsComplete() {
+		if added && cs.ProposalBlockParts.IsComplete() && cs.ProposalBlobParts.IsComplete() {
 			cs.handleCompleteProposal(msg.Height)
 		}
 		if added {
@@ -1286,7 +1286,7 @@ func (cs *State) defaultDecideProposal(height int64, round int32) {
 	// Decide on block
 	if cs.ValidBlock != nil {
 		// If there is valid block, choose that.
-		block, blockParts, blob = cs.ValidBlock, cs.ValidBlockParts, cs.ProposalBlob
+		block, blockParts = cs.ValidBlock, cs.ValidBlockParts
 	} else {
 		// Create a new proposal block from state/txs from the mempool.
 		var err error
@@ -2295,10 +2295,6 @@ func (cs *State) defaultSetProposal(proposal *types.Proposal, recvTime time.Time
 		cs.ProposalBlockParts = types.NewPartSetFromHeader(proposal.BlockID.PartSetHeader)
 	}
 
-	if !cs.Proposal.BlobID.IsNil() && cs.ProposalBlobParts == nil {
-		cs.ProposalBlobParts = types.NewPartSetFromHeader(proposal.BlobID.PartSetHeader)
-	}
-
 	cs.Logger.Info("Received proposal", "proposal", proposal, "proposer", pubKey.Address())
 	return nil
 }
@@ -2426,7 +2422,7 @@ func (cs *State) addProposalBlockPart(msg *BlockPartMessage, peerID p2p.ID) (add
 		cs.Logger.Info("Received complete proposal block", "height", cs.ProposalBlock.Height, "hash", cs.ProposalBlock.Hash())
 
 		// Both blocks and blobs need to be complete to fire the event.
-		if cs.Proposal.BlobID.IsNil() || cs.ProposalBlob != nil {
+		if cs.ProposalBlobParts.IsComplete() {
 			if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
 				cs.Logger.Error("Failed publishing event complete proposal", "err", err)
 			}
@@ -2502,7 +2498,7 @@ func (cs *State) addProposalBlobPart(msg *BlobPartMessage, peerID p2p.ID) (added
 	//		cs.ProposalBlockParts.ByteSize(), maxBytes,
 	//	)
 	//}
-	if added && cs.ProposalBlobParts.IsComplete() {
+	if added && cs.ProposalBlockParts.IsComplete() {
 		bz, err := cs.readSerializedBlobFromBlobParts()
 		if err != nil {
 			return added, err
