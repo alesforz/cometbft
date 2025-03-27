@@ -478,7 +478,7 @@ FOR_LOOP:
 			// Try again quickly next loop.
 			didProcessCh <- struct{}{}
 
-			firstParts, err := first.MakePartSet(types.PartSizeBytes)
+			firstParts, err := first.MakePartSet(types.BlockPartSizeBytes)
 			if err != nil {
 				bcR.Logger.Error("failed to make ",
 					"height", first.Height,
