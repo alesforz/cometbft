@@ -1092,6 +1092,7 @@ func newPersistentKVStoreWithPathAndBlob(dbDir string) abci.Application {
 	app.SetGenerateBlobs()
 	return app
 }
+
 func newPersistentKVStoreWithPath(dbDir string) abci.Application {
 	return kvstore.NewPersistentApplication(dbDir)
 }
