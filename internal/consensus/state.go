@@ -2506,23 +2506,14 @@ func (cs *State) addProposalBlobPart(msg *BlobPartMessage, peerID p2p.ID) (added
 	//	)
 	//}
 	if added && cs.ProposalBlobParts.IsComplete() {
-		bz, err := cs.readSerializedBlobFromBlobParts()
+
+		serializeBlob, err := cs.readSerializedBlobFromBlobParts()
 		if err != nil {
 			return added, err
 		}
 
-		pbb := new(cmtproto.Blob)
-		err = proto.Unmarshal(bz, pbb)
-		if err != nil {
-			return added, err
-		}
-
-		blob, err := types.BlobFromProto(pbb)
-		if err != nil {
-			return added, err
-		}
-
-		cs.ProposalBlob = blob
+		// We do not need to  proto decode the blob as it is bytes.
+		cs.ProposalBlob = serializeBlob
 
 		// NOTE: it's possible to receive complete proposal blobs for future rounds without having the proposal
 		cs.Logger.Info("Received complete proposal blob", "hash", cs.ProposalBlob.Hash())
