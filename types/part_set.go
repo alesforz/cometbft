@@ -212,7 +212,7 @@ type PartSet struct {
 // NewPartSetFromData returns an immutable, full PartSet from the data bytes.
 // The data bytes are split into "partSize" chunks, and merkle tree computed.
 // CONTRACT: partSize is greater than zero.
-func NewPartSetFromData(data []byte, partSize uint32) *PartSet {
+func NewPartSetFromData(data []byte, partSize uint32, partSetType PartSetType) *PartSet {
 	// divide data into parts of size `partSize`
 	total := (uint32(len(data)) + partSize - 1) / partSize
 	parts := make([]*Part, total)
@@ -232,6 +232,7 @@ func NewPartSetFromData(data []byte, partSize uint32) *PartSet {
 	}
 	partsBitArray := bits.NewBitArrayFromFn(int(total), func(int) bool { return true })
 	return &PartSet{
+		partSetType:   partSetType,
 		total:         total,
 		hash:          root,
 		parts:         parts,
@@ -242,8 +243,9 @@ func NewPartSetFromData(data []byte, partSize uint32) *PartSet {
 }
 
 // NewPartSetFromHeader returns an empty PartSet ready to be populated.
-func NewPartSetFromHeader(header PartSetHeader) *PartSet {
+func NewPartSetFromHeader(header PartSetHeader, partSetType PartSetType) *PartSet {
 	return &PartSet{
+		partSetType:   partSetType,
 		total:         header.Total,
 		hash:          header.Hash,
 		parts:         make([]*Part, header.Total),

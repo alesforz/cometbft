@@ -3119,14 +3119,14 @@ func TestStateOutputsBlockPartsStats(t *testing.T) {
 	peer := p2pmock.NewPeer(nil)
 
 	// 1) new block part
-	parts := types.NewPartSetFromData(cmtrand.Bytes(100), 10)
+	parts := types.NewPartSetFromData(cmtrand.Bytes(100), 10, types.PartSetTypeBlock)
 	msg := &BlockPartMessage{
 		Height: 1,
 		Round:  0,
 		Part:   parts.GetPart(0),
 	}
 
-	cs.ProposalBlockParts = types.NewPartSetFromHeader(parts.Header())
+	cs.ProposalBlockParts = types.NewPartSetFromHeader(parts.Header(), types.PartSetTypeBlock)
 	cs.handleMsg(msgInfo{msg, peer.ID(), time.Time{}})
 
 	statsMessage := <-cs.statsMsgQueue
@@ -3396,7 +3396,7 @@ func TestReadSerializedBlockFromBlockParts(t *testing.T) {
 			testName := fmt.Sprintf("initialSize=%d,newBlockSize=%d", initialSize, newBlockSize)
 			t.Run(testName, func(t *testing.T) {
 				blockData := cmtrand.Bytes(newBlockSize)
-				ps := types.NewPartSetFromData(blockData, 64)
+				ps := types.NewPartSetFromData(blockData, 64, types.PartSetTypeBlock)
 				cs := &State{
 					serializedBlockBuffer: make([]byte, initialSize),
 				}
@@ -3425,7 +3425,7 @@ func TestReadSerializedBlobFromBlobParts(t *testing.T) {
 			testName := fmt.Sprintf("initialSize=%d,newBlockSize=%d", initialSize, newBlobSize)
 			t.Run(testName, func(t *testing.T) {
 				blobData := cmtrand.Bytes(newBlobSize)
-				ps := types.NewPartSetFromData(blobData, 64)
+				ps := types.NewPartSetFromData(blobData, 64, types.PartSetTypeBlob)
 				cs := &State{
 					serializedBlobBuffer: make([]byte, initialSize),
 				}
