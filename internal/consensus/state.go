@@ -2505,7 +2505,7 @@ func (cs *State) addProposalBlobPart(msg *BlobPartMessage, peerID p2p.ID) (added
 	//		cs.ProposalBlockParts.ByteSize(), maxBytes,
 	//	)
 	//}
-	if added && cs.ProposalBlockParts.IsComplete() {
+	if added && cs.ProposalBlobParts.IsComplete() {
 		bz, err := cs.readSerializedBlobFromBlobParts()
 		if err != nil {
 			return added, err
