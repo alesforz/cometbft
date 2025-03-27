@@ -220,7 +220,7 @@ func (p *pbtsTestHarness) nextHeight(
 	k, err := proposer.GetPubKey()
 	require.NoError(t, err)
 	b.Header.ProposerAddress = k.Address()
-	ps, err := b.MakePartSet(types.PartSizeBytes)
+	ps, err := b.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 	bid := types.BlockID{Hash: b.Hash(), PartSetHeader: ps.Header()}
 	prop := types.NewProposal(
