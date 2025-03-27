@@ -3284,7 +3284,7 @@ func TestStateTimestamp_ProposalMatch(t *testing.T) {
 	propBlock, propBlockParts, blockID, blob := createProposalBlockAndBlob(t, cs1)
 
 	assert.NoError(t, err)
-	blobParts := types.NewPartSetFromData(blob, types.PartSizeBytes)
+	blobParts := types.NewPartSetFromData(blob, types.BlobPartSizeBytes, types.PartSetTypeBlob)
 
 	blobID := types.BlobID{Hash: blob.Hash(), PartSetHeader: blobParts.Header()}
 
