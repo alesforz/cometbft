@@ -3271,7 +3271,7 @@ func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
 // proposed block if the timestamp in the block matches the timestamp in the
 // corresponding proposal message.
 func TestStateTimestamp_ProposalMatch(t *testing.T) {
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 
