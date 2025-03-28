@@ -233,6 +233,24 @@ func startTestRound(cs *State, height int64, round int32) {
 	cs.startRoutines(0)
 }
 
+func createProposalBlockWithTimeAndBlob(t *testing.T, cs *State, time time.Time) (*types.Block, *types.PartSet, types.BlockID, types.Blob) {
+	t.Helper()
+	block, blob, err := cs.createProposalBlock(context.Background())
+	if !time.IsZero() {
+		block.Time = cmttime.Canonical(time)
+	}
+	assert.NoError(t, err)
+	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	assert.NoError(t, err)
+	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
+	return block, blockParts, blockID, blob
+}
+
+func createProposalBlockAndBlob(t *testing.T, cs *State) (*types.Block, *types.PartSet, types.BlockID, types.Blob) {
+	t.Helper()
+	return createProposalBlockWithTimeAndBlob(t, cs, time.Time{})
+}
+
 func createProposalBlockWithTime(t *testing.T, cs *State, time time.Time) (*types.Block, *types.PartSet, types.BlockID) {
 	t.Helper()
 	block, _, err := cs.createProposalBlock(context.Background())
@@ -530,6 +548,12 @@ func randState(nValidators int) (*State, []*validatorStub) {
 	return randStateWithApp(nValidators, kvstore.NewInMemoryApplication())
 }
 
+func randStateWithBlob(nValidators int) (*State, []*validatorStub) {
+	app := kvstore.NewInMemoryApplication()
+	app.SetGenerateBlobs()
+	return randStateWithApp(nValidators, app)
+}
+
 func randStateWithAppWithHeight(
 	nValidators int,
 	app abci.Application,
@@ -704,7 +728,7 @@ func ensureRelock(relockCh <-chan cmtpubsub.Message, height int64, round int32) 
 		"Timeout expired while waiting for RelockValue event")
 }
 
-func ensureProposalWithTimeout(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID *types.BlockID, timeout time.Duration) {
+func ensureProposalWithTimeout(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID *types.BlockID, blobID *types.BlobID, timeout time.Duration) {
 	select {
 	case <-time.After(timeout):
 		panic("Timeout expired while waiting for NewProposal event")
@@ -725,16 +749,25 @@ func ensureProposalWithTimeout(proposalCh <-chan cmtpubsub.Message, height int64
 				panic(fmt.Sprintf("Proposed block does not match expected block (%v != %v)", proposalEvent.BlockID, *propID))
 			}
 		}
+		if blobID != nil {
+			if !bytes.Equal(proposalEvent.BlobID.Hash, blobID.Hash) {
+				panic(fmt.Sprintf("Proposed blob does not match expected block (%v != %v)", proposalEvent.BlockID, *propID))
+			}
+		}
 	}
 }
 
+func ensureProposalWithBlob(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID types.BlockID, blobID types.BlobID) {
+	ensureProposalWithTimeout(proposalCh, height, round, &propID, &blobID, ensureTimeout)
+}
+
 func ensureProposal(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID types.BlockID) {
-	ensureProposalWithTimeout(proposalCh, height, round, &propID, ensureTimeout)
+	ensureProposalWithTimeout(proposalCh, height, round, &propID, nil, ensureTimeout)
 }
 
 // For the propose, as we do not know the blockID in advance.
 func ensureNewProposal(proposalCh <-chan cmtpubsub.Message, height int64, round int32) {
-	ensureProposalWithTimeout(proposalCh, height, round, nil, ensureTimeout)
+	ensureProposalWithTimeout(proposalCh, height, round, nil, nil, ensureTimeout)
 }
 
 func ensurePrecommit(voteCh <-chan cmtpubsub.Message, height int64, round int32) {
@@ -1046,6 +1079,18 @@ func newPersistentKVStore() abci.Application {
 
 func newKVStore() abci.Application {
 	return kvstore.NewInMemoryApplication()
+}
+
+func newKVStoreWithBlobk() abci.Application {
+	app := kvstore.NewInMemoryApplication()
+	app.SetGenerateBlobs()
+	return app
+}
+
+func newPersistentKVStoreWithPathAndBlob(dbDir string) abci.Application {
+	app := kvstore.NewPersistentApplication(dbDir)
+	app.SetGenerateBlobs()
+	return app
 }
 
 func newPersistentKVStoreWithPath(dbDir string) abci.Application {

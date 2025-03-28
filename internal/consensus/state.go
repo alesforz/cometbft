@@ -517,6 +517,47 @@ func (cs *State) AddProposalBlockPart(height int64, round int32, part *types.Par
 	return nil
 }
 
+// AddProposalBlockPart inputs a part of the proposal block.
+func (cs *State) AddProposalBlobPart(height int64, round int32, part *types.Part, peerID p2p.ID) error {
+	if peerID == "" {
+		cs.internalMsgQueue <- msgInfo{&BlobPartMessage{height, round, part}, "", time.Time{}}
+	} else {
+		cs.peerMsgQueue <- msgInfo{&BlobPartMessage{height, round, part}, peerID, time.Time{}}
+	}
+
+	// TODO: wait for event?!
+	return nil
+}
+
+// SetProposalBlockAndBlob inputs the proposal and all block parts.
+func (cs *State) SetProposalBlobAndBlock(
+	proposal *types.Proposal,
+	blockParts *types.PartSet,
+	blobParts *types.PartSet,
+	peerID p2p.ID,
+) error {
+	// TODO: Since the block parameter is not used, we should instead expose just a SetProposal method.
+	if err := cs.SetProposal(proposal, peerID); err != nil {
+		return err
+	}
+
+	for i := 0; i < int(blockParts.Total()); i++ {
+		part := blockParts.GetPart(i)
+		if err := cs.AddProposalBlockPart(proposal.Height, proposal.Round, part, peerID); err != nil {
+			return err
+		}
+	}
+
+	for i := 0; i < int(blobParts.Total()); i++ {
+		part := blobParts.GetPart(i)
+		if err := cs.AddProposalBlobPart(proposal.Height, proposal.Round, part, peerID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // SetProposalAndBlock inputs the proposal and all block parts.
 func (cs *State) SetProposalAndBlock(
 	proposal *types.Proposal,
@@ -2284,7 +2325,9 @@ func (cs *State) defaultSetProposal(proposal *types.Proposal, recvTime time.Time
 		return ErrProposalTooManyParts
 	}
 
-	if int64(proposal.BlobID.PartSetHeader.Total) > (maxBytes-1)/int64(types.BlockPartSizeBytes)+1 {
+	// Validate the proposed blob size, derived from its PartSetHeader
+	maxBlobBytes := int64(types.MaxBlobSizeBytes)
+	if int64(proposal.BlobID.PartSetHeader.Total) > (maxBlobBytes-1)/int64(types.BlobPartSizeBytes)+1 {
 		return ErrProposalTooManyParts
 	}
 
@@ -2495,34 +2538,20 @@ func (cs *State) addProposalBlobPart(msg *BlobPartMessage, peerID p2p.ID) (added
 	cs.Logger.Debug("Receive blob part", "height", height, "round", round,
 		"index", part.Index, "count", count, "total", total, "from", peerID)
 
-	// Todo: Implement blob configuration
-	// maxBytes := cs.state.ConsensusParams.Blob.MaxBytes
-	// if maxBytes == -1 {
-	//	maxBytes = int64(types.MaxBlockSizeBytes)
-	//}
-	// if cs.ProposalBlockParts.ByteSize() > maxBytes {
-	//	return added, fmt.Errorf("total size of proposal block parts exceeds maximum block bytes (%d > %d)",
-	//		cs.ProposalBlockParts.ByteSize(), maxBytes,
-	//	)
-	//}
+	maxBlobBytes := int64(types.MaxBlobSizeBytes)
+	if cs.ProposalBlobParts.ByteSize() > maxBlobBytes {
+		return added, fmt.Errorf("total size of proposal blob parts exceeds maximum blob bytes (%d > %d)",
+			cs.ProposalBlobParts.ByteSize(), maxBlobBytes,
+		)
+	}
 	if added && cs.ProposalBlobParts.IsComplete() {
-		bz, err := cs.readSerializedBlobFromBlobParts()
+		serializeBlob, err := cs.readSerializedBlobFromBlobParts()
 		if err != nil {
 			return added, err
 		}
 
-		pbb := new(cmtproto.Blob)
-		err = proto.Unmarshal(bz, pbb)
-		if err != nil {
-			return added, err
-		}
-
-		blob, err := types.BlobFromProto(pbb)
-		if err != nil {
-			return added, err
-		}
-
-		cs.ProposalBlob = blob
+		// We do not need to  proto decode the blob as it is bytes.
+		cs.ProposalBlob = serializeBlob
 
 		// NOTE: it's possible to receive complete proposal blobs for future rounds without having the proposal
 		cs.Logger.Info("Received complete proposal blob", "hash", cs.ProposalBlob.Hash())

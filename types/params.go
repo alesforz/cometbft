@@ -19,6 +19,9 @@ const (
 	// MaxBlockSizeBytes is the maximum permitted size of the blocks.
 	MaxBlockSizeBytes = 100 * 1024 * 1024
 
+	// MaxBlobSizeBytes is the maximum permitted size of the blob.
+	MaxBlobSizeBytes = 800 * 1024
+
 	// BlockPartSizeBytes is the size of one block part.
 	BlockPartSizeBytes uint32 = 65536 // 64kB
 
