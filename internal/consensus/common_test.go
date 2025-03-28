@@ -1081,17 +1081,12 @@ func newKVStore() abci.Application {
 	return kvstore.NewInMemoryApplication()
 }
 
-func newKVStoreWithBlobk() abci.Application {
-	app := kvstore.NewInMemoryApplication()
-	app.SetGenerateBlobs()
-	return app
-}
-
 func newPersistentKVStoreWithPathAndBlob(dbDir string) abci.Application {
 	app := kvstore.NewPersistentApplication(dbDir)
 	app.SetGenerateBlobs()
 	return app
 }
+
 func newPersistentKVStoreWithPath(dbDir string) abci.Application {
 	return kvstore.NewPersistentApplication(dbDir)
 }

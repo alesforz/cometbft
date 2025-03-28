@@ -1275,7 +1275,6 @@ func (ps *PeerState) SetHasProposal(proposal *types.Proposal) {
 		ps.PRS.ProposalBlobPartSetHeader = proposal.BlobID.PartSetHeader
 		ps.PRS.ProposalBlobParts = bits.NewBitArray(int(proposal.BlobID.PartSetHeader.Total))
 	}
-
 }
 
 // InitProposalBlockParts initializes the peer's proposal block parts header and bit array.
