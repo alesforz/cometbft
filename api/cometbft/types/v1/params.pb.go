@@ -612,7 +612,7 @@ type BlobParams struct {
 	// Maximum size of a blob, in bytes.
 	//
 	// Must be greater or equal to -1 and cannot be greater than the hard-coded
-	// maximum blob size, which is 100MB.
+	// maximum blob size, which is 800kB.
 	//
 	// If set to -1, the limit is the hard-coded maximum blob size.
 	MaxBytes int64 `protobuf:"varint,1,opt,name=max_bytes,json=maxBytes,proto3" json:"max_bytes,omitempty"`
