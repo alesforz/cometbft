@@ -2326,9 +2326,12 @@ func (cs *State) defaultSetProposal(proposal *types.Proposal, recvTime time.Time
 	}
 
 	// Validate the proposed blob size, derived from its PartSetHeader
-	maxBlobBytes := int64(types.MaxBlobSizeBytes)
+	maxBlobBytes := cs.state.ConsensusParams.Blob.MaxBytes
+	if maxBytes == -1 {
+		maxBytes = int64(types.MaxBlobSizeBytes)
+	}
 	if int64(proposal.BlobID.PartSetHeader.Total) > (maxBlobBytes-1)/int64(types.BlobPartSizeBytes)+1 {
-		return ErrProposalTooManyParts
+		return ErrProposalTooManyBlobParts
 	}
 
 	proposal.Signature = p.Signature
