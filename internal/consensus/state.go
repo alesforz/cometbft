@@ -964,7 +964,7 @@ func (cs *State) handleMsg(mi msgInfo) {
 		cs.mtx.Unlock()
 
 		cs.mtx.Lock()
-		if added && cs.ProposalBlockParts.IsComplete() && (cs.Proposal.BlobID.IsNil() || cs.ProposalBlobParts.IsComplete()) {
+		if added && cs.ProposalBlockParts.IsComplete() && ((cs.ProposalBlobParts != nil && cs.ProposalBlobParts.IsComplete()) || cs.ProposalBlobParts == nil) {
 			cs.handleCompleteProposal(msg.Height)
 		}
 		if added {
@@ -1190,7 +1190,7 @@ func (cs *State) enterNewRound(height int64, round int32) {
 		cs.ProposalReceiveTime = time.Time{}
 		cs.ProposalBlock = nil
 		cs.ProposalBlockParts = nil
-		cs.ProposalBlob = types.Blob{}
+		cs.ProposalBlob = nil
 		cs.ProposalBlobParts = nil
 	}
 
@@ -2472,7 +2472,7 @@ func (cs *State) addProposalBlockPart(msg *BlockPartMessage, peerID p2p.ID) (add
 		cs.Logger.Info("Received complete proposal block", "height", cs.ProposalBlock.Height, "hash", cs.ProposalBlock.Hash())
 
 		// Both blocks and blobs need to be complete to fire the event.
-		if cs.Proposal.BlobID.IsNil() || cs.ProposalBlobParts.IsComplete() {
+		if cs.ProposalBlobParts == nil || (cs.ProposalBlobParts != nil && cs.ProposalBlobParts.IsComplete()) {
 			if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
 				cs.Logger.Error("Failed publishing event complete proposal", "err", err)
 			}
@@ -2545,13 +2545,13 @@ func (cs *State) addProposalBlobPart(msg *BlobPartMessage, peerID p2p.ID) (added
 		)
 	}
 	if added && cs.ProposalBlobParts.IsComplete() {
-		blob, err := cs.readSerializedBlobFromBlobParts()
+		serializeBlob, err := cs.readSerializedBlobFromBlobParts()
 		if err != nil {
 			return added, err
 		}
 
-		// We do not need to proto decode the blob as it is bytes.
-		cs.ProposalBlob = blob
+		// We do not need to  proto decode the blob as it is bytes.
+		cs.ProposalBlob = serializeBlob
 
 		// NOTE: it's possible to receive complete proposal blobs for future rounds without having the proposal
 		cs.Logger.Info("Received complete proposal blob", "hash", cs.ProposalBlob.Hash())
