@@ -3390,7 +3390,7 @@ func findBlockSizeLimit(t *testing.T, height, maxBytes int64, cs *State, partSiz
 // TestReadSerializedBlockFromBlockParts tests that the readSerializedBlockFromBlockParts function
 // reads the block correctly from the block parts.
 //
-//nolint:dupl
+
 func TestReadSerializedBlockFromBlockParts(t *testing.T) {
 	sizes := []int{0, 5, 64, 70, 128, 200}
 
@@ -3421,7 +3421,7 @@ func TestReadSerializedBlockFromBlockParts(t *testing.T) {
 // TestReadSerializedBlobFromBlobParts tests that the readSerializedBlobFromBlobParts function
 // reads the block correctly from the blob parts.
 //
-//nolint:dupl
+
 func TestReadSerializedBlobFromBlobParts(t *testing.T) {
 	sizes := []int{0, 5, 64, 70, 128, 200}
 
