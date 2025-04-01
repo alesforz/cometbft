@@ -154,7 +154,7 @@ message BlobParams {
   // Maximum size of a blob, in bytes.
   //
   // Must be greater or equal to -1 and cannot be greater than the hard-coded
-  // maximum blob size, which is 800kB.
+  // maximum blob size, which is 800kB (819200 bytes).
   //
   // If set to -1, the limit is the hard-coded maximum blob size.
   int64 max_bytes = 1;
