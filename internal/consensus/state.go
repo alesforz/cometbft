@@ -2326,9 +2326,12 @@ func (cs *State) defaultSetProposal(proposal *types.Proposal, recvTime time.Time
 	}
 
 	// Validate the proposed blob size, derived from its PartSetHeader
-	maxBlobBytes := int64(types.MaxBlobSizeBytes)
+	maxBlobBytes := cs.state.ConsensusParams.Blob.MaxBytes
+	if maxBlobBytes == -1 {
+		maxBlobBytes = int64(types.MaxBlobSizeBytes)
+	}
 	if int64(proposal.BlobID.PartSetHeader.Total) > (maxBlobBytes-1)/int64(types.BlobPartSizeBytes)+1 {
-		return ErrProposalTooManyParts
+		return ErrProposalTooManyBlobParts
 	}
 
 	proposal.Signature = p.Signature
@@ -2538,7 +2541,10 @@ func (cs *State) addProposalBlobPart(msg *BlobPartMessage, peerID p2p.ID) (added
 	cs.Logger.Debug("Receive blob part", "height", height, "round", round,
 		"index", part.Index, "count", count, "total", total, "from", peerID)
 
-	maxBlobBytes := int64(types.MaxBlobSizeBytes)
+	maxBlobBytes := cs.state.ConsensusParams.Blob.MaxBytes
+	if maxBlobBytes == -1 {
+		maxBlobBytes = int64(types.MaxBlobSizeBytes)
+	}
 	if cs.ProposalBlobParts.ByteSize() > maxBlobBytes {
 		return added, fmt.Errorf("total size of proposal blob parts exceeds maximum blob bytes (%d > %d)",
 			cs.ProposalBlobParts.ByteSize(), maxBlobBytes,
