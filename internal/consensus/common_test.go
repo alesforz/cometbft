@@ -1001,7 +1001,7 @@ func randGenesisDoc(numValidators int,
 }
 
 func randGenesisState(
-	numValidators int,                      //nolint: unparam
+	numValidators int, //nolint: unparam
 	consensusParams *types.ConsensusParams, //nolint: unparam
 ) (sm.State, []types.PrivValidator) {
 	if consensusParams == nil {
