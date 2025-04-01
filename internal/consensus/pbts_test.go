@@ -150,7 +150,7 @@ func (p *pbtsTestHarness) observedValidatorProposerHeight(t *testing.T, previous
 	if timeout < ensureTimeout {
 		timeout = ensureTimeout
 	}
-	ensureProposalWithTimeout(p.ensureProposalCh, p.currentHeight, p.currentRound, nil, nil, timeout)
+	ensureProposalWithTimeout(p.ensureProposalCh, p.currentHeight, p.currentRound, nil, types.BlobID{}, timeout)
 
 	rs := p.observedState.GetRoundState()
 	bid := types.BlockID{Hash: rs.ProposalBlock.Hash(), PartSetHeader: rs.ProposalBlockParts.Header()}
