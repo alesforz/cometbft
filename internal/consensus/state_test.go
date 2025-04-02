@@ -458,10 +458,12 @@ func TestStateFullRound1(t *testing.T) {
 	ensureNewRound(newRoundCh, height, round)
 	ensureNewProposal(propCh, height, round)
 
-	propBlob := cs.getRoundState().ProposalBlob
+	rs := cs.GetRoundState()
+
+	propBlob := rs.ProposalBlob
 	require.NotEmpty(t, propBlob, "blob should not be empty")
 
-	propBlobParts := cs.getRoundState().ProposalBlobParts
+	propBlobParts := rs.ProposalBlobParts
 	require.NotNil(t, propBlobParts, "blob parts should not be nil")
 
 	var (
@@ -492,8 +494,10 @@ func TestStateFullRoundNil(t *testing.T) {
 	cs.enterPrevote(height, round)
 	cs.startRoutines(4)
 
+	rs := cs.GetRoundState()
+
 	// For a nil proposal, we should not have a proposal blob or blob parts.
-	proposalBlob := cs.GetRoundState().ProposalBlob
+	proposalBlob := rs.ProposalBlob
 	// Blobs should never be nil.
 	// They should be initialized as empty slices ([]byte{}).
 	// A nil value indicates a bug, meaning we likely missed initializing the blob
@@ -501,7 +505,7 @@ func TestStateFullRoundNil(t *testing.T) {
 	require.NotNil(t, proposalBlob, "blob should not be nil")
 	require.Empty(t, proposalBlob, "blob should be empty")
 
-	proposalBlobParts := cs.GetRoundState().ProposalBlobParts
+	proposalBlobParts := rs.ProposalBlobParts
 	require.Nil(t, proposalBlobParts, "blob parts should be nil")
 
 	ensurePrevoteMatch(t, voteCh, height, round, nil)   // prevote
