@@ -543,14 +543,16 @@ func (cs *State) SetProposalBlobAndBlock(
 
 	for i := 0; i < int(blockParts.Total()); i++ {
 		part := blockParts.GetPart(i)
-		if err := cs.AddProposalBlockPart(proposal.Height, proposal.Round, part, peerID); err != nil {
+		err := cs.AddProposalBlockPart(proposal.Height, proposal.Round, part, peerID)
+		if err != nil {
 			return err
 		}
 	}
 
 	for i := 0; i < int(blobParts.Total()); i++ {
 		part := blobParts.GetPart(i)
-		if err := cs.AddProposalBlobPart(proposal.Height, proposal.Round, part, peerID); err != nil {
+		err := cs.AddProposalBlobPart(proposal.Height, proposal.Round, part, peerID)
+		if err != nil {
 			return err
 		}
 	}

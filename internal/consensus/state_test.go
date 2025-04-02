@@ -828,7 +828,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	cs2, _ := randStateWithBlob(2)
 
 	// before we time out into new round, set next proposal block
-	prop, propBlock, propBlob := decideProposal(
+	prop, propBlk, propBlob := decideProposal(
 		ctx,
 		t,
 		cs2,
@@ -836,14 +836,9 @@ func TestStateLock_NoPOL(t *testing.T) {
 		val2.Height,
 		val2.Round+1,
 	)
-	require.NotNil(t, propBlock, "Failed to create proposal block with val2")
+	require.NotNil(t, propBlk, "Failed to create proposal block with val2")
 	require.NotEmpty(t, propBlob, "Failed to create proposal blob with val2")
 	require.NotNil(t, prop, "Failed to create proposal block with val2")
-
-	propBlockID := types.BlockID{
-		Hash:          propBlock.Hash(),
-		PartSetHeader: partSet.Header(),
-	}
 
 	incrementRound(val2)
 
@@ -855,34 +850,49 @@ func TestStateLock_NoPOL(t *testing.T) {
 	*/
 
 	// now we're on a new round and not the proposer
-	// so set the proposal block
-	bps3, err := propBlock.MakePartSet(partSize)
+	// so set the proposal block we received from val2
+	propBlkParts, err := propBlk.MakePartSet(partSize)
 	require.NoError(t, err)
 
-	err = cs1.SetProposalAndBlock(prop, bps3, "")
+	var (
+		propBlkID = types.BlockID{
+			Hash:          propBlk.Hash(),
+			PartSetHeader: propBlkParts.Header(),
+		}
+		blobParts  = types.NewPartSetFromData(propBlob, partSize)
+		propBlobID = types.BlobID{
+			Hash:          propBlob.Hash(),
+			PartSetHeader: blobParts.Header(),
+		}
+	)
+
+	err = cs1.SetProposalBlobAndBlock(prop, propBlkParts, blobParts, "")
 	require.NoError(t, err)
 
-	ensureNewProposal(proposalCh, height, round)
+	ensureProposalWithBlob(proposalCh, height, round, propBlkID, propBlobID)
 
-	// prevote for nil since we did not see a proposal for our locked block in the round.
+	// prevote for nil since we did not see a proposal for our locked block in the
+	// round.
 	ensurePrevote(voteCh, height, round)
-	validatePrevote(t, cs1, 3, validators[0], nil)
+	validatePrevote(t, cs1, 3 /* round */, validators[0], nil /* block hash */)
 
 	// prevote for proposed block
-	signAddVotes(cs1, types.PrevoteType, chainID, propBlockID, false, val2)
+	signAddVotes(cs1, types.PrevoteType, chainID, propBlkID, false, val2)
 	ensurePrevote(voteCh, height, round)
 
-	ensureNewTimeout(timeoutWaitCh, height, round, cs1.config.Prevote(round).Nanoseconds())
+	ensureNewTimeout(
+		timeoutWaitCh,
+		height,
+		round,
+		cs1.config.Prevote(round).Nanoseconds(),
+	)
 	ensurePrecommit(voteCh, height, round)
-	validatePrecommit(t, cs1, round, 0, validators[0], nil, initialBlockID.Hash) // precommit nil but locked on proposal
 
-	signAddVotes(
-		cs1,
-		types.PrecommitType,
-		chainID,
-		propBlockID,
-		true,
-		val2) // NOTE: conflicting precommits at same height
+	// precommit nil but locked on proposal
+	validatePrecommit(t, cs1, round, 0, validators[0], nil, initialBlockID.Hash)
+
+	// NOTE: conflicting precommits at same height
+	signAddVotes(cs1, types.PrecommitType, chainID, propBlkID, true, val2)
 	ensurePrecommit(voteCh, height, round)
 }
 
