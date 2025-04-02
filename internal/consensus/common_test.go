@@ -240,7 +240,7 @@ func createProposalBlockWithTimeAndBlob(t *testing.T, cs *State, time time.Time)
 		block.Time = cmttime.Canonical(time)
 	}
 	assert.NoError(t, err)
-	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	blockParts, err := block.MakePartSet(types.PartSizeBytes)
 	assert.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
 	return block, blockParts, blockID, blob
@@ -258,7 +258,7 @@ func createProposalBlockWithTime(t *testing.T, cs *State, time time.Time) (*type
 		block.Time = cmttime.Canonical(time)
 	}
 	assert.NoError(t, err)
-	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	blockParts, err := block.MakePartSet(types.PartSizeBytes)
 	assert.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
 	return block, blockParts, blockID
@@ -728,7 +728,7 @@ func ensureRelock(relockCh <-chan cmtpubsub.Message, height int64, round int32) 
 		"Timeout expired while waiting for RelockValue event")
 }
 
-func ensureProposalWithTimeout(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID *types.BlockID, blobID *types.BlobID, timeout time.Duration) {
+func ensureProposalWithTimeout(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID *types.BlockID, blobID types.BlobID, timeout time.Duration) {
 	select {
 	case <-time.After(timeout):
 		panic("Timeout expired while waiting for NewProposal event")
@@ -749,7 +749,7 @@ func ensureProposalWithTimeout(proposalCh <-chan cmtpubsub.Message, height int64
 				panic(fmt.Sprintf("Proposed block does not match expected block (%v != %v)", proposalEvent.BlockID, *propID))
 			}
 		}
-		if blobID != nil {
+		if !blobID.IsNil() {
 			if !bytes.Equal(proposalEvent.BlobID.Hash, blobID.Hash) {
 				panic(fmt.Sprintf("Proposed blob does not match expected block (%v != %v)", proposalEvent.BlockID, *propID))
 			}
@@ -758,16 +758,16 @@ func ensureProposalWithTimeout(proposalCh <-chan cmtpubsub.Message, height int64
 }
 
 func ensureProposalWithBlob(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID types.BlockID, blobID types.BlobID) {
-	ensureProposalWithTimeout(proposalCh, height, round, &propID, &blobID, ensureTimeout)
+	ensureProposalWithTimeout(proposalCh, height, round, &propID, blobID, ensureTimeout)
 }
 
 func ensureProposal(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID types.BlockID) {
-	ensureProposalWithTimeout(proposalCh, height, round, &propID, nil, ensureTimeout)
+	ensureProposalWithTimeout(proposalCh, height, round, &propID, types.BlobID{}, ensureTimeout)
 }
 
 // For the propose, as we do not know the blockID in advance.
 func ensureNewProposal(proposalCh <-chan cmtpubsub.Message, height int64, round int32) {
-	ensureProposalWithTimeout(proposalCh, height, round, nil, nil, ensureTimeout)
+	ensureProposalWithTimeout(proposalCh, height, round, nil, types.BlobID{}, ensureTimeout)
 }
 
 func ensurePrecommit(voteCh <-chan cmtpubsub.Message, height int64, round int32) {
