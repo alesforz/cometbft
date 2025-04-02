@@ -1341,7 +1341,7 @@ func (cs *State) defaultDecideProposal(height int64, round int32) {
 
 		cs.metrics.ProposalCreateCount.Add(1)
 
-		blockParts, err = block.MakePartSet(types.BlockPartSizeBytes)
+		blockParts, err = block.MakePartSet(types.PartSizeBytes)
 		if err != nil {
 			cs.Logger.Error("unable to create proposal block part set", "error", err)
 			return
@@ -1361,7 +1361,7 @@ func (cs *State) defaultDecideProposal(height int64, round int32) {
 	// Not all blocks have a corresponding blob. If that's the case, we don't create
 	// blob parts and we don't set the blob ID.
 	if !blob.IsNil() {
-		blobParts = types.NewPartSetFromData(blob, types.BlockPartSizeBytes)
+		blobParts = types.NewPartSetFromData(blob, types.PartSizeBytes)
 		propBlobID = types.BlobID{
 			Hash:          blob.Hash(),
 			PartSetHeader: blobParts.Header(),
@@ -2321,7 +2321,7 @@ func (cs *State) defaultSetProposal(proposal *types.Proposal, recvTime time.Time
 	if maxBytes == -1 {
 		maxBytes = int64(types.MaxBlockSizeBytes)
 	}
-	if int64(proposal.BlockID.PartSetHeader.Total) > (maxBytes-1)/int64(types.BlockPartSizeBytes)+1 {
+	if int64(proposal.BlockID.PartSetHeader.Total) > (maxBytes-1)/int64(types.PartSizeBytes)+1 {
 		return ErrProposalTooManyParts
 	}
 
@@ -2330,7 +2330,7 @@ func (cs *State) defaultSetProposal(proposal *types.Proposal, recvTime time.Time
 	if maxBlobBytes == -1 {
 		maxBlobBytes = int64(types.MaxBlobSizeBytes)
 	}
-	if int64(proposal.BlobID.PartSetHeader.Total) > (maxBlobBytes-1)/int64(types.BlockPartSizeBytes)+1 {
+	if int64(proposal.BlobID.PartSetHeader.Total) > (maxBlobBytes-1)/int64(types.PartSizeBytes)+1 {
 		return ErrProposalTooManyBlobParts
 	}
 
