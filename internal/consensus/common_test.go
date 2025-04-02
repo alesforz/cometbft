@@ -26,6 +26,7 @@ import (
 	"github.com/cometbft/cometbft/crypto"
 	cstypes "github.com/cometbft/cometbft/internal/consensus/types"
 	cmtos "github.com/cometbft/cometbft/internal/os"
+	cmtrand "github.com/cometbft/cometbft/internal/rand"
 	"github.com/cometbft/cometbft/internal/test"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/libs/log"
@@ -277,7 +278,7 @@ func decideProposal(
 	vs *validatorStub,
 	height int64,
 	round int32,
-) (*types.Proposal, *types.Block) {
+) (*types.Proposal, *types.Block, types.Blob) {
 	t.Helper()
 
 	cs1.mtx.Lock()
@@ -293,6 +294,13 @@ func decideProposal(
 	}
 
 	var (
+		blob      = types.Blob(cmtrand.Bytes(42))
+		blobParts = types.NewPartSetFromData(blob, types.PartSizeBytes)
+		blobID    = types.BlobID{
+			Hash:          blob.Hash(),
+			PartSetHeader: blobParts.Header(),
+		}
+
 		// Make proposal
 		proposal = types.NewProposal(
 			height,
@@ -300,7 +308,7 @@ func decideProposal(
 			validRound,
 			propBlockID,
 			block.Header.Time,
-			types.BlobID{},
+			blobID,
 		)
 		p = proposal.ToProto()
 	)
@@ -310,7 +318,7 @@ func decideProposal(
 
 	proposal.Signature = p.Signature
 
-	return proposal, block
+	return proposal, block, blob
 }
 
 func addVotes(to *State, votes ...*types.Vote) {
