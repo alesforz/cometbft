@@ -287,9 +287,14 @@ func TestStateBadProposal(t *testing.T) {
 	}
 	stateHash[0] = (stateHash[0] + 1) % 255
 	propBlock.AppHash = stateHash
+
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID := types.BlockID{Hash: propBlock.Hash(), PartSetHeader: propBlockParts.Header()}
+
+	blockID := types.BlockID{
+		Hash:          propBlock.Hash(),
+		PartSetHeader: propBlockParts.Header(),
+	}
 	proposal := types.NewProposal(
 		vs2.Height,
 		round,
@@ -343,6 +348,7 @@ func TestStateOversizedBlock(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			cs1, vss := randState(2)
 			cs1.state.ConsensusParams.Block.MaxBytes = maxBytes
+
 			height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 			vs2 := vss[1]
 
