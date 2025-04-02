@@ -477,13 +477,25 @@ func TestStateFullRound1(t *testing.T) {
 
 // nil is proposed, so prevote and precommit nil.
 func TestStateFullRoundNil(t *testing.T) {
-	cs, _ := randState(1)
+	cs, _ := randStateWithBlob(1)
 	height, round := cs.Height, cs.Round
 
 	voteCh := subscribeUnBuffered(cs.eventBus, types.EventQueryVote)
 
 	cs.enterPrevote(height, round)
 	cs.startRoutines(4)
+
+	// For a nil proposal, we should not have a proposal blob or blob parts.
+	proposalBlob := cs.GetRoundState().ProposalBlob
+	// Blobs should never be nil.
+	// They should be initialized as empty slices ([]byte{}).
+	// A nil value indicates a bug, meaning we likely missed initializing the blob
+	// somewhere in the code.
+	require.NotNil(t, proposalBlob, "blob should not be nil")
+	require.Empty(t, proposalBlob, "blob should be empty")
+
+	proposalBlobParts := cs.GetRoundState().ProposalBlobParts
+	require.Nil(t, proposalBlobParts, "blob parts should be nil")
 
 	ensurePrevoteMatch(t, voteCh, height, round, nil)   // prevote
 	ensurePrecommitMatch(t, voteCh, height, round, nil) // precommit
