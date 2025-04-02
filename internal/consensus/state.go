@@ -413,7 +413,7 @@ func (cs *State) OnStart() error {
 }
 
 // timeoutRoutine: receive requests for timeouts on tickChan and fire timeouts on tockChan
-// receiveRoutine: serializes processing of proposoals, block parts, votes; coordinates state transitions.
+// receiveRoutine: serializes processing of proposals, block parts, votes; coordinates state transitions.
 func (cs *State) startRoutines(maxSteps int) {
 	err := cs.timeoutTicker.Start()
 	if err != nil {
@@ -543,14 +543,16 @@ func (cs *State) SetProposalBlobAndBlock(
 
 	for i := 0; i < int(blockParts.Total()); i++ {
 		part := blockParts.GetPart(i)
-		if err := cs.AddProposalBlockPart(proposal.Height, proposal.Round, part, peerID); err != nil {
+		err := cs.AddProposalBlockPart(proposal.Height, proposal.Round, part, peerID)
+		if err != nil {
 			return err
 		}
 	}
 
 	for i := 0; i < int(blobParts.Total()); i++ {
 		part := blobParts.GetPart(i)
-		if err := cs.AddProposalBlobPart(proposal.Height, proposal.Round, part, peerID); err != nil {
+		err := cs.AddProposalBlobPart(proposal.Height, proposal.Round, part, peerID)
+		if err != nil {
 			return err
 		}
 	}
