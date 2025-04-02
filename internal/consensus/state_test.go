@@ -464,6 +464,13 @@ func TestStateFullRound1(t *testing.T) {
 	propBlobParts := cs.getRoundState().ProposalBlobParts
 	require.NotNil(t, propBlobParts, "blob parts should not be nil")
 
+	var (
+		partSize               = int(types.PartSizeBytes)
+		proposalBlobPartsCount = (len(propBlob) + partSize - 1) / partSize
+	)
+	// check that the number of blob parts is correct
+	require.Equal(t, proposalBlobPartsCount, int(propBlobParts.Total()))
+
 	ensurePrevote(voteCh, height, round) // wait for prevote
 
 	propBlockHash := cs.GetRoundState().ProposalBlock.Hash()
@@ -504,34 +511,64 @@ func TestStateFullRoundNil(t *testing.T) {
 // run through propose, prevote, precommit commit with two validators
 // where the first validator has to wait for votes from the second.
 func TestStateFullRound2(t *testing.T) {
-	cs1, vss := randState(2)
-	vs2 := vss[1]
-	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
+	var (
+		cState, validators = randStateWithBlob(2)
+		height, round      = cState.Height, cState.Round
 
-	voteCh := subscribeUnBuffered(cs1.eventBus, types.EventQueryVote)
-	newBlockCh := subscribe(cs1.eventBus, types.EventQueryNewBlock)
+		voteCh     = subscribeUnBuffered(cState.eventBus, types.EventQueryVote)
+		newBlockCh = subscribe(cState.eventBus, types.EventQueryNewBlock)
+	)
 
 	// start round and wait for propose and prevote
-	startTestRound(cs1, height, round)
+	startTestRound(cState, height, round)
 
 	ensurePrevote(voteCh, height, round) // prevote
 
 	// we should be stuck in limbo waiting for more prevotes
-	rs := cs1.GetRoundState()
-	blockID := types.BlockID{Hash: rs.ProposalBlock.Hash(), PartSetHeader: rs.ProposalBlockParts.Header()}
 
-	// prevote arrives from vs2:
-	signAddVotes(cs1, types.PrevoteType, chainID, blockID, false, vs2)
+	rs := cState.GetRoundState()
+
+	proposalBlob := rs.ProposalBlob
+	require.NotEmpty(t, proposalBlob, "blob should not be empty")
+
+	proposalBlobParts := rs.ProposalBlobParts
+	require.NotNil(t, proposalBlobParts, "blob parts should not be nil")
+
+	var (
+		partSize               = int(types.PartSizeBytes)
+		proposalBlobPartsCount = (len(proposalBlob) + partSize - 1) / partSize
+	)
+	// check that the number of blob parts is correct
+	require.Equal(t, proposalBlobPartsCount, int(proposalBlobParts.Total()))
+
+	var (
+		blockID = types.BlockID{
+			Hash:          rs.ProposalBlock.Hash(),
+			PartSetHeader: rs.ProposalBlockParts.Header(),
+		}
+		val2    = validators[1]
+		chainID = cState.state.ChainID
+	)
+	// prevote arrives from validator 2
+	signAddVotes(cState, types.PrevoteType, chainID, blockID, false, val2)
 	ensurePrevote(voteCh, height, round) // prevote
 
 	ensurePrecommit(voteCh, height, round) // precommit
 	// the proposed block should now be locked and our precommit added
-	validatePrecommit(t, cs1, 0, 0, vss[0], blockID.Hash, blockID.Hash)
+	validatePrecommit(
+		t,
+		cState,
+		0,             /* round */
+		0,             /* lockedRound */
+		validators[0], /* privVal */
+		blockID.Hash,  /* voted block hash */
+		blockID.Hash,  /* locked block hash */
+	)
 
 	// we should be stuck in limbo waiting for more precommits
 
-	// precommit arrives from vs2:
-	signAddVotes(cs1, types.PrecommitType, chainID, blockID, true, vs2)
+	// precommit arrives from validator 2
+	signAddVotes(cState, types.PrecommitType, chainID, blockID, true, val2)
 	ensurePrecommit(voteCh, height, round)
 
 	// wait to finish commit, propose in next height
