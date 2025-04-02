@@ -429,41 +429,49 @@ func TestStateOversizedBlock(t *testing.T) {
 
 // propose, prevote, and precommit a block.
 func TestStateFullRound1(t *testing.T) {
-	cs, vss := randState(1)
-	height, round := cs.Height, cs.Round
+	var (
+		cs, vss       = randStateWithBlob(1)
+		height, round = cs.Height, cs.Round
+	)
 
 	// NOTE: buffer capacity of 0 ensures we can validate prevote and last commit
 	// before consensus can move to the next height (and cause a race condition)
 	if err := cs.eventBus.Stop(); err != nil {
 		t.Error(err)
 	}
+
 	eventBus := types.NewEventBusWithBufferCapacity(0)
 	eventBus.SetLogger(log.TestingLogger().With("module", "events"))
+
 	cs.SetEventBus(eventBus)
 	if err := eventBus.Start(); err != nil {
 		t.Error(err)
 	}
 
-	voteCh := subscribeUnBuffered(cs.eventBus, types.EventQueryVote)
-	propCh := subscribe(cs.eventBus, types.EventQueryCompleteProposal)
-	newRoundCh := subscribe(cs.eventBus, types.EventQueryNewRound)
-
+	var (
+		voteCh     = subscribeUnBuffered(cs.eventBus, types.EventQueryVote)
+		propCh     = subscribe(cs.eventBus, types.EventQueryCompleteProposal)
+		newRoundCh = subscribe(cs.eventBus, types.EventQueryNewRound)
+	)
 	// Maybe it would be better to call explicitly startRoutines(4)
 	startTestRound(cs, height, round)
-
 	ensureNewRound(newRoundCh, height, round)
-
 	ensureNewProposal(propCh, height, round)
-	propBlockHash := cs.GetRoundState().ProposalBlock.Hash()
+
+	propBlob := cs.getRoundState().ProposalBlob
+	require.NotEmpty(t, propBlob, "blob should not be empty")
+
+	propBlobParts := cs.getRoundState().ProposalBlobParts
+	require.NotNil(t, propBlobParts, "blob parts should not be nil")
 
 	ensurePrevote(voteCh, height, round) // wait for prevote
-	validatePrevote(t, cs, round, vss[0], propBlockHash)
 
+	propBlockHash := cs.GetRoundState().ProposalBlock.Hash()
+	validatePrevote(t, cs, round, vss[0], propBlockHash)
 	ensurePrecommit(voteCh, height, round) // wait for precommit
 
 	// we're going to roll right into new height
 	ensureNewRound(newRoundCh, height+1, 0)
-
 	validateLastPrecommit(t, cs, vss[0], propBlockHash)
 }
 
