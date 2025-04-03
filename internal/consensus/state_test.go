@@ -2749,7 +2749,7 @@ func TestProposeValidBlock(t *testing.T) {
 // What we want:
 // P0 miss to lock B but set valid block to B after receiving delayed prevote.
 func TestSetValidBlockOnDelayedPrevote(t *testing.T) {
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 
@@ -2759,8 +2759,10 @@ func TestSetValidBlockOnDelayedPrevote(t *testing.T) {
 	timeoutWaitCh := subscribe(cs1.eventBus, types.EventQueryTimeoutWait)
 	newRoundCh := subscribe(cs1.eventBus, types.EventQueryNewRound)
 	validBlockCh := subscribe(cs1.eventBus, types.EventQueryValidBlock)
+
 	pv1, err := cs1.privValidator.GetPubKey()
 	require.NoError(t, err)
+
 	addr := pv1.Address()
 	voteCh := subscribeToVoter(cs1, addr)
 
@@ -2769,10 +2771,16 @@ func TestSetValidBlockOnDelayedPrevote(t *testing.T) {
 	ensureNewRound(newRoundCh, height, round)
 
 	ensureNewProposal(proposalCh, height, round)
+
 	rs := cs1.GetRoundState()
+	require.NotEmpty(t, rs.ProposalBlob, "blob should not be empty")
+	require.NotNil(t, rs.ProposalBlobParts, "blob parts should not be nil")
+
 	propBlock := rs.ProposalBlock
+
 	partSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
+
 	blockID := types.BlockID{
 		Hash:          propBlock.Hash(),
 		PartSetHeader: partSet.Header(),
@@ -2794,10 +2802,13 @@ func TestSetValidBlockOnDelayedPrevote(t *testing.T) {
 	validatePrecommit(t, cs1, round, -1, vss[0], nil, nil)
 
 	rs = cs1.GetRoundState()
-
 	assert.Nil(t, rs.ValidBlock)
 	assert.Nil(t, rs.ValidBlockParts)
 	assert.Equal(t, int32(-1), rs.ValidRound)
+	// we haven't set valid block, but we are still in the same round, therefore the
+	// blob should be there.
+	assert.NotEmpty(t, rs.ProposalBlob, "blob should not be empty")
+	assert.NotNil(t, rs.ProposalBlobParts, "blob parts should not be nil")
 
 	// vs2 send (delayed) prevote for propBlock
 	signAddVotes(cs1, types.PrevoteType, chainID, blockID, false, vs4)
@@ -2805,10 +2816,13 @@ func TestSetValidBlockOnDelayedPrevote(t *testing.T) {
 	ensureNewValidBlock(validBlockCh, height, round)
 
 	rs = cs1.GetRoundState()
-
 	assert.True(t, bytes.Equal(rs.ValidBlock.Hash(), blockID.Hash))
 	assert.True(t, rs.ValidBlockParts.Header().Equals(blockID.PartSetHeader))
 	assert.Equal(t, rs.ValidRound, round)
+	// we have now set valid block, and because we are still in the same round, the
+	// blob should be there.
+	assert.NotEmpty(t, rs.ProposalBlob, "blob should not be empty")
+	assert.NotNil(t, rs.ProposalBlobParts, "blob parts should not be nil")
 }
 
 // What we want:
