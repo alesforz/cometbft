@@ -2641,7 +2641,7 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 // What we want:
 // P0 proposes B0 at R3.
 func TestProposeValidBlock(t *testing.T) {
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 
@@ -2651,8 +2651,10 @@ func TestProposeValidBlock(t *testing.T) {
 	timeoutWaitCh := subscribe(cs1.eventBus, types.EventQueryTimeoutWait)
 	timeoutProposeCh := subscribe(cs1.eventBus, types.EventQueryTimeoutPropose)
 	newRoundCh := subscribe(cs1.eventBus, types.EventQueryNewRound)
+
 	pv1, err := cs1.privValidator.GetPubKey()
 	require.NoError(t, err)
+
 	addr := pv1.Address()
 	voteCh := subscribeToVoter(cs1, addr)
 
@@ -2661,10 +2663,16 @@ func TestProposeValidBlock(t *testing.T) {
 	ensureNewRound(newRoundCh, height, round)
 
 	ensureNewProposal(proposalCh, height, round)
+
 	rs := cs1.GetRoundState()
+	require.NotEmpty(t, rs.ProposalBlob, "blob should not be empty")
+	require.NotNil(t, rs.ProposalBlobParts, "blob parts should not be nil")
+
 	propBlock := rs.ProposalBlock
+
 	partSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
+
 	blockID := types.BlockID{
 		Hash:          propBlock.Hash(),
 		PartSetHeader: partSet.Header(),
@@ -2693,6 +2701,12 @@ func TestProposeValidBlock(t *testing.T) {
 
 	// timeout of propose
 	ensureNewTimeout(timeoutProposeCh, height, round, cs1.config.Propose(round).Nanoseconds())
+
+	rs = cs1.GetRoundState()
+	// validator did not receive the proposal for this round, therefore the blob
+	// should be absent
+	require.Empty(t, rs.ProposalBlob, "blob should be empty")
+	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
 	// We did not see a valid proposal within this round, so prevote nil.
 	ensurePrevote(voteCh, height, round)
@@ -2728,6 +2742,8 @@ func TestProposeValidBlock(t *testing.T) {
 	assert.True(t, bytes.Equal(rs.ProposalBlock.Hash(), rs.ValidBlock.Hash()))
 	assert.Equal(t, rs.Proposal.POLRound, rs.ValidRound)
 	assert.True(t, bytes.Equal(rs.Proposal.BlockID.Hash, rs.ValidBlock.Hash()))
+	assert.True(t, len(rs.ProposalBlob) == 0)
+	assert.True(t, rs.ProposalBlobParts == nil)
 }
 
 // What we want:
