@@ -1959,8 +1959,10 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 	// Produce a block
 	block, _, err := cs1.createProposalBlock(ctx)
 	require.NoError(t, err)
+
 	blockParts, err := block.MakePartSet(types.PartSizeBytes)
 	require.NoError(t, err)
+
 	blockID := types.BlockID{
 		Hash:          block.Hash(),
 		PartSetHeader: blockParts.Header(),
@@ -1982,11 +1984,17 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 		err := cs1.AddProposalBlockPart(height, round, blockParts.GetPart(i), "peer")
 		require.NoError(t, err)
 	}
+
 	ensureNewValidBlock(validBlockCh, height, round)
 
 	// We don't prevote right now because we didn't receive the round's
 	// Proposal. Wait for the propose timeout.
-	ensureNewTimeout(timeoutProposeCh, height, round, cs1.config.Propose(round).Nanoseconds())
+	ensureNewTimeout(
+		timeoutProposeCh,
+		height,
+		round,
+		cs1.config.Propose(round).Nanoseconds(),
+	)
 
 	rs := cs1.GetRoundState()
 	assert.Equal(t, rs.ValidRound, round)
@@ -2028,7 +2036,12 @@ func TestState_MissingProposalValidBlockReceivedPrecommit(t *testing.T) {
 	ensureNewValidBlock(validBlockCh, height, round)
 
 	// We don't have the Proposal, so we wait for timeout propose
-	ensureNewTimeout(timeoutProposeCh, height, round, cs1.config.Propose(round).Nanoseconds())
+	ensureNewTimeout(
+		timeoutProposeCh,
+		height,
+		round,
+		cs1.config.Propose(round).Nanoseconds(),
+	)
 	ensurePrevote(voteCh, height, round)
 	validatePrevote(t, cs1, round, vss[0], nil)
 
@@ -2048,14 +2061,16 @@ func TestState_MissingProposalValidBlockReceivedPrecommit(t *testing.T) {
 // block if a proposal was not seen for that block in the current round, but
 // was seen in a previous round.
 func TestStateLock_DoesNotLockOnOldProposal(t *testing.T) {
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 
 	timeoutWaitCh := subscribe(cs1.eventBus, types.EventQueryTimeoutWait)
 	proposalCh := subscribe(cs1.eventBus, types.EventQueryCompleteProposal)
+
 	pv1, err := cs1.privValidator.GetPubKey()
 	require.NoError(t, err)
+
 	addr := pv1.Address()
 	voteCh := subscribeToVoter(cs1, addr)
 	newRoundCh := subscribe(cs1.eventBus, types.EventQueryNewRound)
@@ -2072,7 +2087,11 @@ func TestStateLock_DoesNotLockOnOldProposal(t *testing.T) {
 
 	ensureNewRound(newRoundCh, height, round)
 	ensureNewProposal(proposalCh, height, round)
+
 	rs := cs1.GetRoundState()
+	require.NotEmpty(t, rs.ProposalBlob, "blob should not be empty")
+	require.NotNil(t, rs.ProposalBlobParts, "blob parts should not be nil")
+
 	firstBlockID := types.BlockID{
 		Hash:          rs.ProposalBlock.Hash(),
 		PartSetHeader: rs.ProposalBlockParts.Header(),
@@ -2080,18 +2099,41 @@ func TestStateLock_DoesNotLockOnOldProposal(t *testing.T) {
 
 	ensurePrevote(voteCh, height, round)
 
-	signAddVotes(cs1, types.PrevoteType, chainID, types.BlockID{}, false, vs2, vs3, vs4)
+	signAddVotes(
+		cs1,
+		types.PrevoteType,
+		chainID,
+		types.BlockID{},
+		false,
+		vs2,
+		vs3,
+		vs4,
+	)
 
 	// The proposed block should not have been locked.
 	ensurePrecommit(voteCh, height, round)
 	validatePrecommit(t, cs1, round, -1, vss[0], nil, nil)
 
-	signAddVotes(cs1, types.PrecommitType, chainID, types.BlockID{}, true, vs2, vs3, vs4)
+	signAddVotes(
+		cs1,
+		types.PrecommitType,
+		chainID,
+		types.BlockID{},
+		true,
+		vs2,
+		vs3,
+		vs4,
+	)
 
 	incrementRound(vs2, vs3, vs4)
 
 	// timeout to new round
-	ensureNewTimeout(timeoutWaitCh, height, round, cs1.config.Precommit(round).Nanoseconds())
+	ensureNewTimeout(
+		timeoutWaitCh,
+		height,
+		round,
+		cs1.config.Precommit(round).Nanoseconds(),
+	)
 
 	/*
 		Round 1:
@@ -2106,13 +2148,20 @@ func TestStateLock_DoesNotLockOnOldProposal(t *testing.T) {
 	round++
 	ensureNewRound(newRoundCh, height, round)
 
+	rs = cs1.GetRoundState()
+	// validator did not receive the proposal for this round, therefore the blob
+	// should be absent
+	require.Empty(t, rs.ProposalBlob, "blob should be empty")
+	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
+
 	ensurePrevote(voteCh, height, round)
 	validatePrevote(t, cs1, round, vss[0], nil)
 
 	// All validators prevote for the old block.
 	signAddVotes(cs1, types.PrevoteType, chainID, firstBlockID, false, vs2, vs3, vs4)
 
-	// Make sure that cs1 did not lock on the block since it did not receive a proposal for it.
+	// Make sure that cs1 did not lock on the block since it did not receive a
+	// proposal for it.
 	ensurePrecommit(voteCh, height, round)
 	validatePrecommit(t, cs1, round, -1, vss[0], nil, nil)
 }
