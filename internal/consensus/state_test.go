@@ -2172,7 +2172,10 @@ func TestStateLock_DoesNotLockOnOldProposal(t *testing.T) {
 // is proposed in round 1, we see the polka and lock it. Then we receive the
 // polka from round 0. We don't do anything and remaining locked on round 1.
 func TestStateLock_POLSafety1(t *testing.T) {
-	cs1, vss := randStateWithBlob(4)
+	app := kvstore.NewInMemoryApplication()
+	app.SetGenerateBlobs()
+
+	cs1, vss := randStateWithApp(4, app)
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 
@@ -2190,7 +2193,7 @@ func TestStateLock_POLSafety1(t *testing.T) {
 	// block for round 1, from vs2, empty
 	// we build it now, to prevent timeouts
 	block1, blockParts1, blockID1 := createProposalBlock(t, cs1)
-	blob1 := types.Blob("hiBlob")
+	blob1 := types.Blob(app.TestBlob())
 	blobParts1 := types.NewPartSetFromData(blob1, types.PartSizeBytes)
 	blobID1 := types.BlobID{
 		Hash:          blob1.Hash(),
