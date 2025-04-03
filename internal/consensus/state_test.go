@@ -1029,18 +1029,8 @@ func TestStateLock_POLUpdateLock(t *testing.T) {
 	propBlkR1Hash := propBlkR1.Hash()
 	require.NotEqual(t, propBlkR1Hash, initialBlkID.Hash)
 
-	var (
-		blkR1ID = types.BlockID{
-			Hash:          propBlkR1Hash,
-			PartSetHeader: propBlkR1Parts.Header(),
-		}
+	propBlobR1Parts := types.NewPartSetFromData(propBlobR1, partSize)
 
-		propBlobR1Parts = types.NewPartSetFromData(propBlobR1, partSize)
-		blobR1ID        = types.BlobID{
-			Hash:          propBlobR1.Hash(),
-			PartSetHeader: propBlobR1Parts.Header(),
-		}
-	)
 	err = cs1.SetProposalBlobAndBlock(
 		propR1,
 		propBlkR1Parts,
@@ -1052,14 +1042,27 @@ func TestStateLock_POLUpdateLock(t *testing.T) {
 	ensureNewRound(newRoundCh, height, round)
 
 	// ensure that the validator receives the proposal.
-	ensureProposalWithBlob(proposalCh, height, round, blkR1ID, blobR1ID)
+	ensureProposalWithBlob(proposalCh, height, round, propR1.BlockID, propR1.BlobID)
+
+	rs = cs1.GetRoundState()
+	require.Equal(t, propBlobR1.Hash(), rs.ProposalBlob.Hash())
+	require.Equal(t, propBlobR1Parts.Header(), rs.ProposalBlobParts.Header())
 
 	// Prevote our nil since the proposal does not match our locked block.
 	ensurePrevote(voteCh, height, round)
 	validatePrevote(t, cs1, round, validators[0], nil)
 
 	// Add prevotes from the remainder of the validators for the new locked block.
-	signAddVotes(cs1, types.PrevoteType, chainID, blkR1ID, false, val2, val3, val4)
+	signAddVotes(
+		cs1,
+		types.PrevoteType,
+		chainID,
+		propR1.BlockID,
+		false,
+		val2,
+		val3,
+		val4,
+	)
 
 	// Check that we lock on a new block.
 	ensureLock(lockCh, height, round)
@@ -1068,7 +1071,15 @@ func TestStateLock_POLUpdateLock(t *testing.T) {
 
 	// We should now be locked on the new block and prevote it since we saw a sufficient amount
 	// prevote for the block.
-	validatePrecommit(t, cs1, round, round, validators[0], propBlkR1Hash, propBlkR1Hash)
+	validatePrecommit(
+		t,
+		cs1,
+		round,
+		round,
+		validators[0],
+		propBlkR1Hash,
+		propBlkR1Hash,
+	)
 }
 
 // TestStateLock_POLRelock tests that a validator updates its locked round if
@@ -1335,14 +1346,16 @@ func TestStateLock_PrevoteNilWhenLockedAndDifferentProposal(t *testing.T) {
 		state.
 	*/
 
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 
 	timeoutWaitCh := subscribe(cs1.eventBus, types.EventQueryTimeoutWait)
 	proposalCh := subscribe(cs1.eventBus, types.EventQueryCompleteProposal)
+
 	pv1, err := cs1.privValidator.GetPubKey()
 	require.NoError(t, err)
+
 	addr := pv1.Address()
 	voteCh := subscribeToVoter(cs1, addr)
 	lockCh := subscribe(cs1.eventBus, types.EventQueryLock)
@@ -1361,7 +1374,11 @@ func TestStateLock_PrevoteNilWhenLockedAndDifferentProposal(t *testing.T) {
 
 	ensureNewRound(newRoundCh, height, round)
 	ensureNewProposal(proposalCh, height, round)
+
 	rs := cs1.GetRoundState()
+	require.NotEmpty(t, rs.ProposalBlob, "blob should not be empty")
+	require.NotNil(t, rs.ProposalBlobParts, "blob parts should not be nil")
+
 	blockID := types.BlockID{
 		Hash:          rs.ProposalBlock.Hash(),
 		PartSetHeader: rs.ProposalBlockParts.Header(),
@@ -1379,10 +1396,24 @@ func TestStateLock_PrevoteNilWhenLockedAndDifferentProposal(t *testing.T) {
 	validatePrecommit(t, cs1, round, round, vss[0], blockID.Hash, blockID.Hash)
 
 	// add precommits from the rest of the validators.
-	signAddVotes(cs1, types.PrecommitType, chainID, types.BlockID{}, true, vs2, vs3, vs4)
+	signAddVotes(
+		cs1,
+		types.PrecommitType,
+		chainID,
+		types.BlockID{},
+		true,
+		vs2,
+		vs3,
+		vs4,
+	)
 
 	// timeout to new round.
-	ensureNewTimeout(timeoutWaitCh, height, round, cs1.config.Precommit(round).Nanoseconds())
+	ensureNewTimeout(
+		timeoutWaitCh,
+		height,
+		round,
+		cs1.config.Precommit(round).Nanoseconds(),
+	)
 
 	/*
 		Round 1:
@@ -1396,24 +1427,56 @@ func TestStateLock_PrevoteNilWhenLockedAndDifferentProposal(t *testing.T) {
 	t.Log("### Starting Round 1")
 	incrementRound(vs2, vs3, vs4)
 	round++
+
 	cs2 := newState(cs1.state, vs2, kvstore.NewInMemoryApplication())
-	propR1, propBlockR1, _ := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
+	propR1, propBlockR1, propBlobR1 := decideProposal(
+		ctx,
+		t,
+		cs2,
+		vs2,
+		vs2.Height,
+		vs2.Round,
+	)
+
 	propBlockR1Parts, err := propBlockR1.MakePartSet(types.PartSizeBytes)
 	require.NoError(t, err)
+
 	propBlockR1Hash := propBlockR1.Hash()
 	require.NotEqual(t, propBlockR1Hash, blockID.Hash)
-	err = cs1.SetProposalAndBlock(propR1, propBlockR1Parts, "some peer")
+
+	propBlobR1Parts := types.NewPartSetFromData(propBlobR1, types.PartSizeBytes)
+
+	err = cs1.SetProposalBlobAndBlock(
+		propR1,
+		propBlockR1Parts,
+		propBlobR1Parts,
+		"some peer",
+	)
 	require.NoError(t, err)
 
 	ensureNewRound(newRoundCh, height, round)
-	ensureNewProposal(proposalCh, height, round)
+
+	ensureProposalWithBlob(proposalCh, height, round, propR1.BlockID, propR1.BlobID)
+
+	rs = cs1.GetRoundState()
+	require.Equal(t, propBlobR1.Hash(), rs.ProposalBlob.Hash())
+	require.Equal(t, propBlobR1Parts.Header(), rs.ProposalBlobParts.Header())
 
 	// Prevote our nil.
 	ensurePrevote(voteCh, height, round)
 	validatePrevote(t, cs1, round, vss[0], nil)
 
 	// Add prevotes from the remainder of the validators for nil.
-	signAddVotes(cs1, types.PrevoteType, chainID, types.BlockID{}, false, vs2, vs3, vs4)
+	signAddVotes(
+		cs1,
+		types.PrevoteType,
+		chainID,
+		types.BlockID{},
+		false,
+		vs2,
+		vs3,
+		vs4,
+	)
 
 	// We should now be locked on the same block but prevote nil.
 	ensurePrecommit(voteCh, height, round)
