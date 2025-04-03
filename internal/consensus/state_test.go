@@ -2467,7 +2467,7 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 
@@ -2475,8 +2475,10 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 
 	timeoutWaitCh := subscribe(cs1.eventBus, types.EventQueryTimeoutWait)
 	proposalCh := subscribe(cs1.eventBus, types.EventQueryCompleteProposal)
+
 	pv1, err := cs1.privValidator.GetPubKey()
 	require.NoError(t, err)
+
 	addr := pv1.Address()
 	voteCh := subscribeToVoter(cs1, addr)
 	lockCh := subscribe(cs1.eventBus, types.EventQueryLock)
@@ -2496,7 +2498,11 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 
 	ensureNewRound(newRoundCh, height, round)
 	ensureNewProposal(proposalCh, height, round)
+
 	rs := cs1.GetRoundState()
+	require.NotEmpty(t, rs.ProposalBlob, "blob should not be empty")
+	require.NotNil(t, rs.ProposalBlobParts, "blob parts should not be nil")
+
 	r0BlockID := types.BlockID{
 		Hash:          rs.ProposalBlock.Hash(),
 		PartSetHeader: rs.ProposalBlockParts.Header(),
@@ -2531,13 +2537,24 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	t.Log("### Starting Round 1")
 	incrementRound(vs2, vs3, vs4)
 	round++
+
 	// Generate a new proposal block.
 	cs2 := newState(cs1.state, vs2, kvstore.NewInMemoryApplication())
 	cs2.ValidRound = 1
-	propR1, propBlockR1, _ := decideProposal(ctx, t, cs2, vs2, vs2.Height, round)
+
+	propR1, propBlockR1, _ := decideProposal(
+		ctx,
+		t,
+		cs2,
+		vs2,
+		vs2.Height,
+		round,
+	)
 	t.Log(propR1.POLRound)
+
 	propBlockR1Parts, err := propBlockR1.MakePartSet(partSize)
 	require.NoError(t, err)
+
 	r1BlockID := types.BlockID{
 		Hash:          propBlockR1.Hash(),
 		PartSetHeader: propBlockR1Parts.Header(),
@@ -2545,6 +2562,12 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	require.NotEqual(t, r1BlockID.Hash, r0BlockID.Hash)
 
 	ensureNewRound(newRoundCh, height, round)
+
+	rs = cs1.GetRoundState()
+	// validator did not receive the proposal for this round, therefore the blob
+	// should be absent
+	require.Empty(t, rs.ProposalBlob, "blob should be empty")
+	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
 	signAddVotes(cs1, types.PrevoteType, chainID, r1BlockID, false, vs2, vs3, vs4)
 
@@ -2564,8 +2587,8 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 		cs1 already saw greater than 2/3 of the voting power on the network vote for
 		D in a previous round, so it should prevote D once it receives a proposal for it.
 
-		cs1 does not need to receive prevotes from other validators before the proposal
-		in this round. It will still prevote the block.
+		cs1 does not need to receive prevotes from other validators before the
+		proposal in this round. It will still prevote the block.
 
 		Send cs1 prevotes for nil and check that it still prevotes its locked block
 		and not the block that it prevoted.
@@ -2573,12 +2596,16 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	t.Log("### Starting Round 2")
 	incrementRound(vs2, vs3, vs4)
 	round++
+
 	propR2 := types.NewProposal(
 		height,
 		round,
 		1, /* POLRound */
 		r1BlockID,
 		propBlockR1.Header.Time,
+		// In rounds after the first, if we are the proposer and we have a block to
+		// re-propose, blob and blob parts are absent, because CometBFT does not
+		// store them.
 		types.BlobID{},
 	)
 	signProposal(t, propR2, chainID, vs3)
@@ -2588,8 +2615,12 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	require.NoError(t, err)
 
 	ensureNewRound(newRoundCh, height, round)
-
 	ensureNewProposal(proposalCh, height, round)
+
+	rs = cs1.GetRoundState()
+	// A re-proposed block does not carry the blob in the proposal.
+	require.Empty(t, rs.ProposalBlob, "blob should be empty")
+	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
 	// We should now prevote this block, despite being locked on the block from
 	// round 0.
