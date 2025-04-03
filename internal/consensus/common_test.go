@@ -759,7 +759,7 @@ func ensureProposalWithTimeout(proposalCh <-chan cmtpubsub.Message, height int64
 		}
 		if !blobID.IsNil() {
 			if !bytes.Equal(proposalEvent.BlobID.Hash, blobID.Hash) {
-				panic(fmt.Sprintf("Proposed blob does not match expected block (%v != %v)", proposalEvent.BlockID, *propID))
+				panic(fmt.Sprintf("Proposed blob does not match expected blob (%v != %v)", proposalEvent.BlobID, blobID))
 			}
 		}
 	}
