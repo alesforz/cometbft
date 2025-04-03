@@ -3745,8 +3745,10 @@ func TestResetTimeoutPrecommitUponNewHeight(t *testing.T) {
 
 	newRoundCh := subscribe(cs1.eventBus, types.EventQueryNewRound)
 	newBlockHeader := subscribe(cs1.eventBus, types.EventQueryNewBlockHeader)
+
 	pv1, err := cs1.privValidator.GetPubKey()
 	require.NoError(t, err)
+
 	addr := pv1.Address()
 	voteCh := subscribeToVoter(cs1, addr)
 
@@ -3755,7 +3757,11 @@ func TestResetTimeoutPrecommitUponNewHeight(t *testing.T) {
 	ensureNewRound(newRoundCh, height, round)
 
 	ensureNewProposal(proposalCh, height, round)
+
 	rs := cs1.GetRoundState()
+	require.Empty(t, rs.ProposalBlob, "Proposal blob should be empty")
+	require.Nil(t, rs.ProposalBlobParts, "Proposal blob parts should be nil")
+
 	blockID := types.BlockID{
 		Hash:          rs.ProposalBlock.Hash(),
 		PartSetHeader: rs.ProposalBlockParts.Header(),
@@ -3776,19 +3782,32 @@ func TestResetTimeoutPrecommitUponNewHeight(t *testing.T) {
 
 	ensureNewBlockHeader(newBlockHeader, height, blockID.Hash)
 
-	prop, propBlock, _ := decideProposal(ctx, t, cs1, vs2, height+1, 0)
+	// new height
+	prop, propBlock, propBlob := decideProposal(ctx, t, cs1, vs2, height+1, 0)
+
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
 
-	err = cs1.SetProposalAndBlock(prop, propBlockParts, "some peer")
+	propBlobParts := types.NewPartSetFromData(propBlob, partSize)
+
+	err = cs1.SetProposalBlobAndBlock(
+		prop,
+		propBlockParts,
+		propBlobParts,
+		"some peer",
+	)
 	require.NoError(t, err)
-	ensureNewProposal(proposalCh, height+1, 0)
+
+	ensureProposalWithBlob(proposalCh, height+1, 0, prop.BlockID, prop.BlobID)
 
 	rs = cs1.GetRoundState()
 	assert.False(
 		t,
 		rs.TriggeredTimeoutPrecommit,
-		"triggeredTimeoutPrecommit should be false at the beginning of each height")
+		"triggeredTimeoutPrecommit should be false at the beginning of each height",
+	)
+	assert.Equal(t, rs.ProposalBlob, propBlob)
+	assert.Equal(t, rs.ProposalBlobParts.Header(), propBlobParts.Header())
 }
 
 // ------------------------------------------------------------------------------------------
