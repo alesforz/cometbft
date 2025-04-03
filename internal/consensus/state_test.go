@@ -2859,16 +2859,20 @@ func TestSetValidBlockOnDelayedProposal(t *testing.T) {
 	ensurePrevote(voteCh, height, round)
 	validatePrevote(t, cs1, round, vss[0], nil)
 
-	prop, propBlock, _ := decideProposal(ctx, t, cs1, vs2, vs2.Height, vs2.Round+1)
-	partSet, err := propBlock.MakePartSet(partSize)
+	prop, propBlock, propBlob := decideProposal(
+		ctx,
+		t,
+		cs1,
+		vs2,
+		vs2.Height,
+		vs2.Round,
+	)
+
+	blkPartSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID := types.BlockID{
-		Hash:          propBlock.Hash(),
-		PartSetHeader: partSet.Header(),
-	}
 
 	// vs2, vs3 and vs4 send prevote for propBlock
-	signAddVotes(cs1, types.PrevoteType, chainID, blockID, false, vs2, vs3, vs4)
+	signAddVotes(cs1, types.PrevoteType, chainID, prop.BlockID, false, vs2, vs3, vs4)
 	ensureNewValidBlock(validBlockCh, height, round)
 
 	ensureNewTimeout(timeoutWaitCh, height, round, cs1.config.Prevote(round).Nanoseconds())
@@ -2876,16 +2880,16 @@ func TestSetValidBlockOnDelayedProposal(t *testing.T) {
 	ensurePrecommit(voteCh, height, round)
 	validatePrecommit(t, cs1, round, -1, vss[0], nil, nil)
 
-	partSet, err = propBlock.MakePartSet(partSize)
-	require.NoError(t, err)
-	err = cs1.SetProposalAndBlock(prop, partSet, "some peer")
+	blobPartSet := types.NewPartSetFromData(propBlob, types.PartSizeBytes)
+
+	err = cs1.SetProposalBlobAndBlock(prop, blkPartSet, blobPartSet, "some peer")
 	require.NoError(t, err)
 
-	ensureNewProposal(proposalCh, height, round)
+	ensureProposalWithBlob(proposalCh, height, round, prop.BlockID, prop.BlobID)
+
 	rs := cs1.GetRoundState()
-
-	assert.True(t, bytes.Equal(rs.ValidBlock.Hash(), blockID.Hash))
-	assert.True(t, rs.ValidBlockParts.Header().Equals(blockID.PartSetHeader))
+	assert.True(t, bytes.Equal(rs.ValidBlock.Hash(), prop.BlockID.Hash))
+	assert.True(t, rs.ValidBlockParts.Header().Equals(prop.BlockID.PartSetHeader))
 	assert.Equal(t, rs.ValidRound, round)
 }
 
