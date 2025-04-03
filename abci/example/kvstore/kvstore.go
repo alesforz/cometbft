@@ -21,6 +21,8 @@ import (
 var (
 	stateKey        = []byte("stateKey")
 	kvPairPrefixKey = []byte("kvPairKey:")
+
+	_testBlob = []byte("testBlob")
 )
 
 const (
@@ -84,6 +86,13 @@ func (app *Application) SetGenBlockEvents() {
 
 func (app *Application) SetGenerateBlobs() {
 	app.generateBlobs = true
+}
+
+// TestBlob returns the blob that the app returns in PrepareProposal.
+// TestBlob is only used in testing, and is not part of the abci.Application
+// interface.
+func (*Application) TestBlob() []byte {
+	return _testBlob
 }
 
 // Info returns information about the state of the application. This is generally used every time a Tendermint instance
@@ -169,7 +178,7 @@ func isValidTx(tx []byte) bool {
 // NOTE: we assume that CometBFT will never provide more transactions than can fit in a block.
 func (app *Application) PrepareProposal(ctx context.Context, req *types.PrepareProposalRequest) (*types.PrepareProposalResponse, error) {
 	if app.generateBlobs {
-		return &types.PrepareProposalResponse{Txs: app.formatTxs(ctx, req.Txs), Blob: []byte("hiBlob")}, nil
+		return &types.PrepareProposalResponse{Txs: app.formatTxs(ctx, req.Txs), Blob: _testBlob}, nil
 	}
 	return &types.PrepareProposalResponse{Txs: app.formatTxs(ctx, req.Txs)}, nil
 }
@@ -204,7 +213,7 @@ func (app *Application) ProcessProposal(ctx context.Context, req *types.ProcessP
 		}
 	}
 
-	if app.generateBlobs && !bytes.Equal(req.Blob, []byte("hiBlob")) {
+	if app.generateBlobs && !bytes.Equal(req.Blob, _testBlob) {
 		return &types.ProcessProposalResponse{Status: types.PROCESS_PROPOSAL_STATUS_REJECT}, nil
 	}
 	return &types.ProcessProposalResponse{Status: types.PROCESS_PROPOSAL_STATUS_ACCEPT}, nil
