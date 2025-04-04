@@ -264,7 +264,7 @@ func TestStateBadProposal(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cs1, vss := randState(2)
+	cs1, vss := randStateWithBlob(2)
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 	vs2 := vss[1]
 
@@ -273,7 +273,7 @@ func TestStateBadProposal(t *testing.T) {
 	proposalCh := subscribe(cs1.eventBus, types.EventQueryCompleteProposal)
 	voteCh := subscribe(cs1.eventBus, types.EventQueryVote)
 
-	propBlock, _, err := cs1.createProposalBlock(ctx) // changeProposer(t, cs1, vs2)
+	propBlk, propBlob, err := cs1.createProposalBlock(ctx)
 	require.NoError(t, err)
 
 	// make the second validator the proposer by incrementing round
@@ -281,52 +281,68 @@ func TestStateBadProposal(t *testing.T) {
 	incrementRound(vss[1:]...)
 
 	// make the block bad by tampering with statehash
-	stateHash := propBlock.AppHash
+	stateHash := propBlk.AppHash
 	if len(stateHash) == 0 {
 		stateHash = make([]byte, 32)
 	}
 	stateHash[0] = (stateHash[0] + 1) % 255
-	propBlock.AppHash = stateHash
+	propBlk.AppHash = stateHash
 
-	propBlockParts, err := propBlock.MakePartSet(partSize)
+	propBlkParts, err := propBlk.MakePartSet(partSize)
 	require.NoError(t, err)
 
-	blockID := types.BlockID{
-		Hash:          propBlock.Hash(),
-		PartSetHeader: propBlockParts.Header(),
+	blkID := types.BlockID{
+		Hash:          propBlk.Hash(),
+		PartSetHeader: propBlkParts.Header(),
 	}
+
+	propBlobParts := types.NewPartSetFromData(propBlob, partSize)
+	blobID := types.BlobID{
+		Hash:          propBlob.Hash(),
+		PartSetHeader: propBlobParts.Header(),
+	}
+
 	proposal := types.NewProposal(
 		vs2.Height,
 		round,
 		-1, /* POLRound */
-		blockID,
-		propBlock.Header.Time,
-		types.BlobID{},
+		blkID,
+		propBlk.Header.Time,
+		blobID,
 	)
 	signProposal(t, proposal, chainID, vs2)
 
 	// set the proposal block
-	err = cs1.SetProposalAndBlock(proposal, propBlockParts, "some peer")
+	err = cs1.SetProposalBlobAndBlock(
+		proposal,
+		propBlkParts,
+		propBlobParts,
+		"some peer",
+	)
 	require.NoError(t, err)
 
 	// start the machine
 	startTestRound(cs1, height, round)
 
 	// wait for proposal
-	ensureProposal(proposalCh, height, round, blockID)
+	ensureProposalWithBlob(proposalCh, height, round, blkID, blobID)
+
+	rs := cs1.GetRoundState()
+	require.Equal(t, rs.ProposalBlob, propBlob)
+	require.Equal(t, rs.ProposalBlobParts, propBlobParts)
 
 	// wait for prevote
 	ensurePrevote(voteCh, height, round)
 	validatePrevote(t, cs1, round, vss[0], nil)
 
 	// add bad prevote from vs2 and wait for it
-	signAddVotes(cs1, types.PrevoteType, chainID, blockID, false, vs2)
+	signAddVotes(cs1, types.PrevoteType, chainID, blkID, false, vs2)
 	ensurePrevote(voteCh, height, round)
 
 	// wait for precommit
 	ensurePrecommit(voteCh, height, round)
 	validatePrecommit(t, cs1, round, -1, vss[0], nil, nil)
-	signAddVotes(cs1, types.PrecommitType, chainID, blockID, true, vs2)
+	signAddVotes(cs1, types.PrecommitType, chainID, blkID, true, vs2)
 }
 
 func TestStateOversizedBlock(t *testing.T) {
@@ -4067,11 +4083,11 @@ func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	startTestRound(cs1, height, round)
-	ensureProposal(proposalCh, height, round, blkID)
+	ensureProposalWithBlob(proposalCh, height, round, blkID, blobID)
 
 	rs := cs1.GetRoundState()
 	require.Equal(t, rs.ProposalBlob, propBlob)
-	require.True(t, rs.ProposalBlobParts.Header().Equals(propBlobParts.Header()))
+	require.Equal(t, rs.ProposalBlobParts, propBlobParts)
 
 	// ensure that the validator prevotes nil.
 	ensurePrevote(voteCh, height, round)
