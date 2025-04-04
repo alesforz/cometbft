@@ -420,12 +420,19 @@ func TestSwitchToConsensusVoteExtensions(t *testing.T) {
 }
 
 func TestReactorRecordsVotesAndBlockPartsAndBlobParts(t *testing.T) {
-	n := 4
-
-	css, _, _, cleanup := randConsensusNetWithPeers(t, n, n, "consensus_reactor_test", newMockTickerFunc(true), newPersistentKVStoreWithPathAndBlob)
-
+	var (
+		n                  = 4
+		css, _, _, cleanup = randConsensusNetWithPeers(
+			t,
+			n, /* n validators */
+			n, /* n peers */
+			"consensus_reactor_test",
+			newMockTickerFunc(true),
+			newPersistentKVStoreWithPathAndBlob,
+		)
+		reactors, blocksSubs, eventBuses = startConsensusNet(t, css, n)
+	)
 	defer cleanup()
-	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, n)
 	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
 	// wait till everyone makes the first new block
@@ -438,9 +445,14 @@ func TestReactorRecordsVotesAndBlockPartsAndBlobParts(t *testing.T) {
 	// Get peer state
 	ps := peer.Get(types.PeerStateKey).(*PeerState)
 
-	assert.Greater(t, ps.VotesSent(), 0, "number of votes sent should have increased")
-	assert.Greater(t, ps.BlockPartsSent(), 0, "number of votes sent should have increased")
-	assert.Greater(t, ps.BlobPartsSent(), 0, "number of votes sent should have increased")
+	msg := "number of votes sent should have increased"
+	assert.Greater(t, ps.VotesSent(), 0, msg)
+
+	msg = "number of block parts sent should have increased"
+	assert.Greater(t, ps.BlockPartsSent(), 0, msg)
+
+	msg = "number of blob parts sent should have increased"
+	assert.Greater(t, ps.BlobPartsSent(), 0, msg)
 }
 
 // Test we record stats about votes and block parts from other peers.
@@ -462,7 +474,7 @@ func TestReactorRecordsVotesAndBlockParts(t *testing.T) {
 	ps := peer.Get(types.PeerStateKey).(*PeerState)
 
 	assert.Greater(t, ps.VotesSent(), 0, "number of votes sent should have increased")
-	assert.Greater(t, ps.BlockPartsSent(), 0, "number of votes sent should have increased")
+	assert.Greater(t, ps.BlockPartsSent(), 0, "number of block parts sent should have increased")
 }
 
 // -------------------------------------------------------------
