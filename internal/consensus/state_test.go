@@ -1949,7 +1949,7 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 
 	timeoutProposeCh := subscribe(cs1.eventBus, types.EventQueryTimeoutPropose)
@@ -1957,7 +1957,7 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 	validBlockCh := subscribe(cs1.eventBus, types.EventQueryValidBlock)
 
 	// Produce a block
-	block, _, err := cs1.createProposalBlock(ctx)
+	block, blob, err := cs1.createProposalBlock(ctx)
 	require.NoError(t, err)
 
 	blockParts, err := block.MakePartSet(types.PartSizeBytes)
@@ -1985,6 +1985,16 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	blobParts := types.NewPartSetFromData(blob, types.PartSizeBytes)
+	for i := 0; i < int(blobParts.Total()); i++ {
+		// In this case, if we receive any blob parts for the block, they will be
+		// ignored, because we didn't receive the round's Proposal.
+		// You’ll see a log message like: "received a blob part when we are not
+		// expecting any".
+		err := cs1.AddProposalBlobPart(height, round, blobParts.GetPart(i), "peer")
+		require.NoError(t, err)
+	}
+
 	ensureNewValidBlock(validBlockCh, height, round)
 
 	// We don't prevote right now because we didn't receive the round's
@@ -2002,10 +2012,6 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 	// Although we've seen a valid block (because we received enough votes for it),
 	// we never received the corresponding proposal. As a result, the node will not
 	// initialize the blob parts slice in the round state.
-	// In this case, if we receive any blob parts for the block, they will be
-	// ignored.
-	// You’ll see a log message like: "received a blob part when we are not
-	// expecting any".
 	assert.Empty(t, rs.ProposalBlob, "blob should be empty")
 	assert.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
