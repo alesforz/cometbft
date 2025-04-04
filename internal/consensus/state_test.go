@@ -4024,36 +4024,54 @@ func TestSignSameVoteTwice(t *testing.T) {
 // proposed block if the timestamp in the block does not match the timestamp in the
 // corresponding proposal message.
 func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 
 	proposalCh := subscribe(cs1.eventBus, types.EventQueryCompleteProposal)
+
 	pv1, err := cs1.privValidator.GetPubKey()
 	require.NoError(t, err)
+
 	addr := pv1.Address()
 	voteCh := subscribeToVoter(cs1, addr)
 
-	propBlock, propBlockParts, blockID := createProposalBlock(t, cs1)
+	propBlk, propBlkParts, blkID, propBlob := createProposalBlockAndBlob(t, cs1)
 
 	round++
 	incrementRound(vss[1:]...)
 
+	propBlobParts := types.NewPartSetFromData(propBlob, types.PartSizeBytes)
+	blobID := types.BlobID{
+		Hash:          propBlob.Hash(),
+		PartSetHeader: propBlobParts.Header(),
+	}
 	// Create a proposal with a timestamp that does not match the timestamp of the
 	// block.
 	proposal := types.NewProposal(
 		vs2.Height,
 		round,
 		-1, /* POLRound */
-		blockID,
-		propBlock.Header.Time.Add(time.Millisecond),
-		types.BlobID{},
+		blkID,
+		propBlk.Header.Time.Add(time.Millisecond),
+		blobID,
 	)
 	signProposal(t, proposal, chainID, vs2)
-	require.NoError(t, cs1.SetProposalAndBlock(proposal, propBlockParts, "some peer"))
+
+	err = cs1.SetProposalBlobAndBlock(
+		proposal,
+		propBlkParts,
+		propBlobParts,
+		"some peer",
+	)
+	require.NoError(t, err)
 
 	startTestRound(cs1, height, round)
-	ensureProposal(proposalCh, height, round, blockID)
+	ensureProposal(proposalCh, height, round, blkID)
+
+	rs := cs1.GetRoundState()
+	require.Equal(t, rs.ProposalBlob, propBlob)
+	require.True(t, rs.ProposalBlobParts.Header().Equals(propBlobParts.Header()))
 
 	// ensure that the validator prevotes nil.
 	ensurePrevote(voteCh, height, round)
@@ -4062,9 +4080,9 @@ func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
 	// This does not refer to the main concern of this test unit. Since
 	// 2/3+ validators have seen the proposal, validated and prevoted for
 	// it, it is a valid proposal. We should lock and precommit for it.
-	signAddVotes(cs1, types.PrevoteType, chainID, blockID, false, vs2, vs3, vs4)
+	signAddVotes(cs1, types.PrevoteType, chainID, blkID, false, vs2, vs3, vs4)
 	ensurePrecommit(voteCh, height, round)
-	validatePrecommit(t, cs1, round, round, vss[0], blockID.Hash, blockID.Hash)
+	validatePrecommit(t, cs1, round, round, vss[0], blkID.Hash, blkID.Hash)
 }
 
 // TestStateTimestamp_ProposalMatch tests that a validator prevotes a
