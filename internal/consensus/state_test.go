@@ -264,7 +264,7 @@ func TestStateBadProposal(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cs1, vss := randState(2)
+	cs1, vss := randStateWithBlob(2)
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 	vs2 := vss[1]
 
@@ -273,7 +273,7 @@ func TestStateBadProposal(t *testing.T) {
 	proposalCh := subscribe(cs1.eventBus, types.EventQueryCompleteProposal)
 	voteCh := subscribe(cs1.eventBus, types.EventQueryVote)
 
-	propBlock, _, err := cs1.createProposalBlock(ctx) // changeProposer(t, cs1, vs2)
+	propBlk, propBlob, err := cs1.createProposalBlock(ctx)
 	require.NoError(t, err)
 
 	// make the second validator the proposer by incrementing round
@@ -281,52 +281,68 @@ func TestStateBadProposal(t *testing.T) {
 	incrementRound(vss[1:]...)
 
 	// make the block bad by tampering with statehash
-	stateHash := propBlock.AppHash
+	stateHash := propBlk.AppHash
 	if len(stateHash) == 0 {
 		stateHash = make([]byte, 32)
 	}
 	stateHash[0] = (stateHash[0] + 1) % 255
-	propBlock.AppHash = stateHash
+	propBlk.AppHash = stateHash
 
-	propBlockParts, err := propBlock.MakePartSet(partSize)
+	propBlkParts, err := propBlk.MakePartSet(partSize)
 	require.NoError(t, err)
 
-	blockID := types.BlockID{
-		Hash:          propBlock.Hash(),
-		PartSetHeader: propBlockParts.Header(),
+	blkID := types.BlockID{
+		Hash:          propBlk.Hash(),
+		PartSetHeader: propBlkParts.Header(),
 	}
+
+	propBlobParts := types.NewPartSetFromData(propBlob, partSize)
+	blobID := types.BlobID{
+		Hash:          propBlob.Hash(),
+		PartSetHeader: propBlobParts.Header(),
+	}
+
 	proposal := types.NewProposal(
 		vs2.Height,
 		round,
 		-1, /* POLRound */
-		blockID,
-		propBlock.Header.Time,
-		types.BlobID{},
+		blkID,
+		propBlk.Header.Time,
+		blobID,
 	)
 	signProposal(t, proposal, chainID, vs2)
 
 	// set the proposal block
-	err = cs1.SetProposalAndBlock(proposal, propBlockParts, "some peer")
+	err = cs1.SetProposalBlobAndBlock(
+		proposal,
+		propBlkParts,
+		propBlobParts,
+		"some peer",
+	)
 	require.NoError(t, err)
 
 	// start the machine
 	startTestRound(cs1, height, round)
 
 	// wait for proposal
-	ensureProposal(proposalCh, height, round, blockID)
+	ensureProposalWithBlob(proposalCh, height, round, blkID, blobID)
+
+	rs := cs1.GetRoundState()
+	require.Equal(t, rs.ProposalBlob, propBlob)
+	require.Equal(t, rs.ProposalBlobParts, propBlobParts)
 
 	// wait for prevote
 	ensurePrevote(voteCh, height, round)
 	validatePrevote(t, cs1, round, vss[0], nil)
 
 	// add bad prevote from vs2 and wait for it
-	signAddVotes(cs1, types.PrevoteType, chainID, blockID, false, vs2)
+	signAddVotes(cs1, types.PrevoteType, chainID, blkID, false, vs2)
 	ensurePrevote(voteCh, height, round)
 
 	// wait for precommit
 	ensurePrecommit(voteCh, height, round)
 	validatePrecommit(t, cs1, round, -1, vss[0], nil, nil)
-	signAddVotes(cs1, types.PrecommitType, chainID, blockID, true, vs2)
+	signAddVotes(cs1, types.PrecommitType, chainID, blkID, true, vs2)
 }
 
 func TestStateOversizedBlock(t *testing.T) {
@@ -777,7 +793,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	// In rounds after the first, if we are the proposer and we have a block to
 	// re-propose, then blob and blob parts are absent, because CometBFT does not
 	// store them.
-	require.NotNil(t, rs.ProposalBlob, "proposal block should never be nil")
+	require.NotNil(t, rs.ProposalBlob, "proposal blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -1199,6 +1215,7 @@ func TestStateLock_POLRelock(t *testing.T) {
 	ensureNewProposal(proposalCh, height, round)
 
 	rs = cs1.GetRoundState()
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -1815,6 +1832,7 @@ func TestStateLock_MissingProposalWhenPOLSeenDoesNotUpdateLock(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -1924,6 +1942,7 @@ func TestStateLock_MissingProposalWhenPOLForLockedBlock(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -1949,7 +1968,7 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 
 	timeoutProposeCh := subscribe(cs1.eventBus, types.EventQueryTimeoutPropose)
@@ -1957,7 +1976,7 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 	validBlockCh := subscribe(cs1.eventBus, types.EventQueryValidBlock)
 
 	// Produce a block
-	block, _, err := cs1.createProposalBlock(ctx)
+	block, blob, err := cs1.createProposalBlock(ctx)
 	require.NoError(t, err)
 
 	blockParts, err := block.MakePartSet(types.PartSizeBytes)
@@ -1985,6 +2004,16 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	blobParts := types.NewPartSetFromData(blob, types.PartSizeBytes)
+	for i := 0; i < int(blobParts.Total()); i++ {
+		// In this case, if we receive any blob parts for the block, they will be
+		// ignored, because we didn't receive the round's Proposal.
+		// You’ll see a log message like: "received a blob part when we are not
+		// expecting any".
+		err := cs1.AddProposalBlobPart(height, round, blobParts.GetPart(i), "peer")
+		require.NoError(t, err)
+	}
+
 	ensureNewValidBlock(validBlockCh, height, round)
 
 	// We don't prevote right now because we didn't receive the round's
@@ -1999,6 +2028,11 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 	rs := cs1.GetRoundState()
 	assert.Equal(t, rs.ValidRound, round)
 	assert.Equal(t, rs.ValidBlock.Hash(), blockID.Hash)
+	// Although we've seen a valid block (because we received enough votes for it),
+	// we never received the corresponding proposal. As a result, the node will not
+	// initialize the blob parts slice in the round state.
+	assert.Empty(t, rs.ProposalBlob, "blob should be empty")
+	assert.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
 	// Since we didn't see the round's Proposal, we should prevote nil.
 	// NOTE: introduced by https://github.com/cometbft/cometbft/pull/1203.
@@ -2011,7 +2045,7 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 // misses the round's Proposal, but receives a Polka for a block and the full
 // block, precommits the valid block even though the Proposal is missing.
 func TestState_MissingProposalValidBlockReceivedPrecommit(t *testing.T) {
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	height, round := cs1.Height, cs1.Round
 	chainID := cs1.state.ChainID
 
@@ -2020,7 +2054,7 @@ func TestState_MissingProposalValidBlockReceivedPrecommit(t *testing.T) {
 	voteCh := subscribe(cs1.eventBus, types.EventQueryVote)
 
 	// Produce a block
-	_, blockParts, blockID := createProposalBlock(t, cs1)
+	_, blockParts, blockID, blob := createProposalBlockAndBlob(t, cs1)
 
 	// Skip round 0 and start consensus
 	round++
@@ -2042,12 +2076,30 @@ func TestState_MissingProposalValidBlockReceivedPrecommit(t *testing.T) {
 		round,
 		cs1.config.Propose(round).Nanoseconds(),
 	)
+
+	rs := cs1.GetRoundState()
+	// We have seen the votes for a valid block, but not the proposal. Therefore,
+	// the blob should be absent.
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
+	require.Empty(t, rs.ProposalBlob, "blob should be empty")
+	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
+
 	ensurePrevote(voteCh, height, round)
 	validatePrevote(t, cs1, round, vss[0], nil)
 
 	// We accept the full block associated with the valid blockID
 	for i := 0; i < int(blockParts.Total()); i++ {
 		err := cs1.AddProposalBlockPart(height, round, blockParts.GetPart(i), "peer")
+		require.NoError(t, err)
+	}
+
+	blobParts := types.NewPartSetFromData(blob, types.PartSizeBytes)
+	for i := 0; i < int(blobParts.Total()); i++ {
+		// In this case, if we receive any blob parts for the block, they will be
+		// ignored, because we didn't receive the round's Proposal.
+		// You’ll see a log message like: "received a blob part when we are not
+		// expecting any".
+		err := cs1.AddProposalBlobPart(height, round, blobParts.GetPart(i), "peer")
 		require.NoError(t, err)
 	}
 
@@ -2151,6 +2203,7 @@ func TestStateLock_DoesNotLockOnOldProposal(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2172,10 +2225,7 @@ func TestStateLock_DoesNotLockOnOldProposal(t *testing.T) {
 // is proposed in round 1, we see the polka and lock it. Then we receive the
 // polka from round 0. We don't do anything and remaining locked on round 1.
 func TestStateLock_POLSafety1(t *testing.T) {
-	app := kvstore.NewInMemoryApplication()
-	app.SetGenerateBlobs()
-
-	cs1, vss := randStateWithApp(4, app)
+	cs1, vss := randStateWithBlob(4)
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 
@@ -2192,8 +2242,7 @@ func TestStateLock_POLSafety1(t *testing.T) {
 
 	// block for round 1, from vs2, empty
 	// we build it now, to prevent timeouts
-	block1, blockParts1, blockID1 := createProposalBlock(t, cs1)
-	blob1 := types.Blob(app.TestBlob())
+	block1, blockParts1, blockID1, blob1 := createProposalBlockAndBlob(t, cs1)
 	blobParts1 := types.NewPartSetFromData(blob1, types.PartSizeBytes)
 	blobID1 := types.BlobID{
 		Hash:          blob1.Hash(),
@@ -2281,6 +2330,7 @@ func TestStateLock_POLSafety1(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2305,11 +2355,8 @@ func TestStateLock_POLSafety1(t *testing.T) {
 // 0 and the proposal from v3 re-proposing the block originally from round 0.
 // We must reject this proposal, since we are locked on round 1.
 func TestStateLock_POLSafety2(t *testing.T) {
-	app := kvstore.NewInMemoryApplication()
-	app.SetGenerateBlobs()
-
 	var (
-		cs1, vss               = randStateWithApp(4, app)
+		cs1, vss               = randStateWithBlob(4)
 		vs2, vs3, vs4          = vss[1], vss[2], vss[3]
 		height, round, chainID = cs1.Height, cs1.Round, cs1.state.ChainID
 
@@ -2326,9 +2373,8 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	var (
 		// block for round 1, from vs2, empty
 		// we build it now, to prevent timeouts
-		block1, blockParts1, blockID1 = createProposalBlock(t, cs1)
+		block1, blockParts1, blockID1, blob1 = createProposalBlockAndBlob(t, cs1)
 
-		blob1      = types.Blob(app.TestBlob())
 		blobParts1 = types.NewPartSetFromData(blob1, types.PartSizeBytes)
 		blobID1    = types.BlobID{
 			Hash:          blob1.Hash(),
@@ -2443,10 +2489,7 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	ensureNewProposal(proposalCh, height, round)
 
 	rs = cs1.GetRoundState()
-	require.Empty(t, rs.ProposalBlob, "blob should be empty")
-	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
-
-	rs = cs1.GetRoundState()
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2566,6 +2609,7 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2619,6 +2663,7 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 
 	rs = cs1.GetRoundState()
 	// A re-proposed block does not carry the blob in the proposal.
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2705,6 +2750,7 @@ func TestProposeValidBlock(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -3733,7 +3779,7 @@ func TestResetTimeoutPrecommitUponNewHeight(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	cs1.state.NextBlockDelay = 10 * time.Millisecond
 
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
@@ -3759,8 +3805,8 @@ func TestResetTimeoutPrecommitUponNewHeight(t *testing.T) {
 	ensureNewProposal(proposalCh, height, round)
 
 	rs := cs1.GetRoundState()
-	require.Empty(t, rs.ProposalBlob, "Proposal blob should be empty")
-	require.Nil(t, rs.ProposalBlobParts, "Proposal blob parts should be nil")
+	require.NotEmpty(t, rs.ProposalBlob, "Proposal blob should not be empty")
+	require.NotNil(t, rs.ProposalBlobParts, "Proposal blob parts should not be nil")
 
 	blockID := types.BlockID{
 		Hash:          rs.ProposalBlock.Hash(),
@@ -4000,36 +4046,54 @@ func TestSignSameVoteTwice(t *testing.T) {
 // proposed block if the timestamp in the block does not match the timestamp in the
 // corresponding proposal message.
 func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	height, round, chainID := cs1.Height, cs1.Round, cs1.state.ChainID
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 
 	proposalCh := subscribe(cs1.eventBus, types.EventQueryCompleteProposal)
+
 	pv1, err := cs1.privValidator.GetPubKey()
 	require.NoError(t, err)
+
 	addr := pv1.Address()
 	voteCh := subscribeToVoter(cs1, addr)
 
-	propBlock, propBlockParts, blockID := createProposalBlock(t, cs1)
+	propBlk, propBlkParts, blkID, propBlob := createProposalBlockAndBlob(t, cs1)
 
 	round++
 	incrementRound(vss[1:]...)
 
+	propBlobParts := types.NewPartSetFromData(propBlob, types.PartSizeBytes)
+	blobID := types.BlobID{
+		Hash:          propBlob.Hash(),
+		PartSetHeader: propBlobParts.Header(),
+	}
 	// Create a proposal with a timestamp that does not match the timestamp of the
 	// block.
 	proposal := types.NewProposal(
 		vs2.Height,
 		round,
 		-1, /* POLRound */
-		blockID,
-		propBlock.Header.Time.Add(time.Millisecond),
-		types.BlobID{},
+		blkID,
+		propBlk.Header.Time.Add(time.Millisecond),
+		blobID,
 	)
 	signProposal(t, proposal, chainID, vs2)
-	require.NoError(t, cs1.SetProposalAndBlock(proposal, propBlockParts, "some peer"))
+
+	err = cs1.SetProposalBlobAndBlock(
+		proposal,
+		propBlkParts,
+		propBlobParts,
+		"some peer",
+	)
+	require.NoError(t, err)
 
 	startTestRound(cs1, height, round)
-	ensureProposal(proposalCh, height, round, blockID)
+	ensureProposalWithBlob(proposalCh, height, round, blkID, blobID)
+
+	rs := cs1.GetRoundState()
+	require.Equal(t, rs.ProposalBlob, propBlob)
+	require.Equal(t, rs.ProposalBlobParts, propBlobParts)
 
 	// ensure that the validator prevotes nil.
 	ensurePrevote(voteCh, height, round)
@@ -4038,9 +4102,9 @@ func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
 	// This does not refer to the main concern of this test unit. Since
 	// 2/3+ validators have seen the proposal, validated and prevoted for
 	// it, it is a valid proposal. We should lock and precommit for it.
-	signAddVotes(cs1, types.PrevoteType, chainID, blockID, false, vs2, vs3, vs4)
+	signAddVotes(cs1, types.PrevoteType, chainID, blkID, false, vs2, vs3, vs4)
 	ensurePrecommit(voteCh, height, round)
-	validatePrecommit(t, cs1, round, round, vss[0], blockID.Hash, blockID.Hash)
+	validatePrecommit(t, cs1, round, round, vss[0], blkID.Hash, blkID.Hash)
 }
 
 // TestStateTimestamp_ProposalMatch tests that a validator prevotes a
