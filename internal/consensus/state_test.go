@@ -793,7 +793,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	// In rounds after the first, if we are the proposer and we have a block to
 	// re-propose, then blob and blob parts are absent, because CometBFT does not
 	// store them.
-	require.NotNil(t, rs.ProposalBlob, "proposal block should never be nil")
+	require.NotNil(t, rs.ProposalBlob, "proposal blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -1215,6 +1215,7 @@ func TestStateLock_POLRelock(t *testing.T) {
 	ensureNewProposal(proposalCh, height, round)
 
 	rs = cs1.GetRoundState()
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -1831,6 +1832,7 @@ func TestStateLock_MissingProposalWhenPOLSeenDoesNotUpdateLock(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -1940,6 +1942,7 @@ func TestStateLock_MissingProposalWhenPOLForLockedBlock(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2077,6 +2080,7 @@ func TestState_MissingProposalValidBlockReceivedPrecommit(t *testing.T) {
 	rs := cs1.GetRoundState()
 	// We have seen the votes for a valid block, but not the proposal. Therefore,
 	// the blob should be absent.
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2199,6 +2203,7 @@ func TestStateLock_DoesNotLockOnOldProposal(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2325,6 +2330,7 @@ func TestStateLock_POLSafety1(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2483,10 +2489,7 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	ensureNewProposal(proposalCh, height, round)
 
 	rs = cs1.GetRoundState()
-	require.Empty(t, rs.ProposalBlob, "blob should be empty")
-	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
-
-	rs = cs1.GetRoundState()
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2606,6 +2609,7 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2659,6 +2663,7 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 
 	rs = cs1.GetRoundState()
 	// A re-proposed block does not carry the blob in the proposal.
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -2745,6 +2750,7 @@ func TestProposeValidBlock(t *testing.T) {
 	rs = cs1.GetRoundState()
 	// validator did not receive the proposal for this round, therefore the blob
 	// should be absent
+	require.NotNil(t, rs.ProposalBlob, "blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
@@ -3799,6 +3805,7 @@ func TestResetTimeoutPrecommitUponNewHeight(t *testing.T) {
 	ensureNewProposal(proposalCh, height, round)
 
 	rs := cs1.GetRoundState()
+	require.NotNil(t, rs.ProposalBlob, "Proposal blob should never be nil")
 	require.Empty(t, rs.ProposalBlob, "Proposal blob should be empty")
 	require.Nil(t, rs.ProposalBlobParts, "Proposal blob parts should be nil")
 
