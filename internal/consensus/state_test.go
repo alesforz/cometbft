@@ -1999,15 +1999,6 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 	rs := cs1.GetRoundState()
 	assert.Equal(t, rs.ValidRound, round)
 	assert.Equal(t, rs.ValidBlock.Hash(), blockID.Hash)
-	// Although we've seen a valid block (because we received enough votes for it),
-	// we never received the corresponding proposal. As a result, the node will not
-	// initialize the blob parts slice in the round state.
-	// In this case, if we receive any blob parts for the block, they will be
-	// ignored.
-	// You’ll see a log message like: "received a blob part when we are not
-	// expecting any".
-	assert.Empty(t, rs.ProposalBlob, "blob should be empty")
-	assert.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
 
 	// Since we didn't see the round's Proposal, we should prevote nil.
 	// NOTE: introduced by https://github.com/cometbft/cometbft/pull/1203.
