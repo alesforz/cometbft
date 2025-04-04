@@ -2333,11 +2333,8 @@ func TestStateLock_POLSafety1(t *testing.T) {
 // 0 and the proposal from v3 re-proposing the block originally from round 0.
 // We must reject this proposal, since we are locked on round 1.
 func TestStateLock_POLSafety2(t *testing.T) {
-	app := kvstore.NewInMemoryApplication()
-	app.SetGenerateBlobs()
-
 	var (
-		cs1, vss               = randStateWithApp(4, app)
+		cs1, vss               = randStateWithBlob(4)
 		vs2, vs3, vs4          = vss[1], vss[2], vss[3]
 		height, round, chainID = cs1.Height, cs1.Round, cs1.state.ChainID
 
@@ -2354,9 +2351,8 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	var (
 		// block for round 1, from vs2, empty
 		// we build it now, to prevent timeouts
-		block1, blockParts1, blockID1 = createProposalBlock(t, cs1)
+		block1, blockParts1, blockID1, blob1 = createProposalBlockAndBlob(t, cs1)
 
-		blob1      = types.Blob(app.TestBlob())
 		blobParts1 = types.NewPartSetFromData(blob1, types.PartSizeBytes)
 		blobID1    = types.BlobID{
 			Hash:          blob1.Hash(),
