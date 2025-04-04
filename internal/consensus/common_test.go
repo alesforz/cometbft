@@ -26,7 +26,6 @@ import (
 	"github.com/cometbft/cometbft/crypto"
 	cstypes "github.com/cometbft/cometbft/internal/consensus/types"
 	cmtos "github.com/cometbft/cometbft/internal/os"
-	cmtrand "github.com/cometbft/cometbft/internal/rand"
 	"github.com/cometbft/cometbft/internal/test"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/libs/log"
@@ -283,9 +282,9 @@ func decideProposal(
 
 	cs1.mtx.Lock()
 	var (
-		block, _, propBlockID = createProposalBlock(t, cs1)
-		validRound            = cs1.ValidRound
-		chainID               = cs1.state.ChainID
+		block, _, propBlockID, blob = createProposalBlockAndBlob(t, cs1)
+		validRound                  = cs1.ValidRound
+		chainID                     = cs1.state.ChainID
 	)
 	cs1.mtx.Unlock()
 
@@ -294,7 +293,6 @@ func decideProposal(
 	}
 
 	var (
-		blob      = types.Blob(cmtrand.Bytes(42))
 		blobParts = types.NewPartSetFromData(blob, types.PartSizeBytes)
 		blobID    = types.BlobID{
 			Hash:          blob.Hash(),
