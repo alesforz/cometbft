@@ -3779,7 +3779,7 @@ func TestResetTimeoutPrecommitUponNewHeight(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	cs1.state.NextBlockDelay = 10 * time.Millisecond
 
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
@@ -3805,9 +3805,8 @@ func TestResetTimeoutPrecommitUponNewHeight(t *testing.T) {
 	ensureNewProposal(proposalCh, height, round)
 
 	rs := cs1.GetRoundState()
-	require.NotNil(t, rs.ProposalBlob, "Proposal blob should never be nil")
-	require.Empty(t, rs.ProposalBlob, "Proposal blob should be empty")
-	require.Nil(t, rs.ProposalBlobParts, "Proposal blob parts should be nil")
+	require.NotEmpty(t, rs.ProposalBlob, "Proposal blob should not be empty")
+	require.NotNil(t, rs.ProposalBlobParts, "Proposal blob parts should not be nil")
 
 	blockID := types.BlockID{
 		Hash:          rs.ProposalBlock.Hash(),
