@@ -865,35 +865,60 @@ func consensusLogger() log.Logger {
 	}).With("module", "consensus")
 }
 
-func randConsensusNet(t *testing.T, nValidators int, testName string, tickerFunc func() TimeoutTicker,
-	appFunc func() abci.Application, configOpts ...func(*cfg.Config),
+func randConsensusNet(
+	t *testing.T,
+	nValidators int,
+	testName string,
+	tickerFunc func() TimeoutTicker,
+	appFunc func() abci.Application,
+	configOpts ...func(*cfg.Config),
 ) ([]*State, cleanupFunc) {
 	t.Helper()
-	genDoc, privVals := randGenesisDoc(nValidators, 30, nil, cmttime.Now())
-	css := make([]*State, nValidators)
-	logger := consensusLogger()
-	configRootDirs := make([]string, 0, nValidators)
+
+	var (
+		genDoc, privVals = randGenesisDoc(nValidators, 30, nil, cmttime.Now())
+		css              = make([]*State, nValidators)
+		logger           = consensusLogger()
+		configRootDirs   = make([]string, 0, nValidators)
+	)
 	for i := 0; i < nValidators; i++ {
-		stateDB := dbm.NewMemDB() // each state needs its own db
-		stateStore := sm.NewStore(stateDB, sm.StoreOptions{
-			DiscardABCIResponses: false,
-		})
-		state, _ := stateStore.LoadFromDBOrGenesisDoc(genDoc)
-		thisConfig := ResetConfig(fmt.Sprintf("%s_%d", testName, i))
+		var (
+			stateDB    = dbm.NewMemDB() // each state needs its own db
+			stateStore = sm.NewStore(stateDB, sm.StoreOptions{
+				DiscardABCIResponses: false,
+			})
+			state, _   = stateStore.LoadFromDBOrGenesisDoc(genDoc)
+			thisConfig = ResetConfig(fmt.Sprintf("%s_%d", testName, i))
+		)
+
 		configRootDirs = append(configRootDirs, thisConfig.RootDir)
 		for _, opt := range configOpts {
 			opt(thisConfig)
 		}
+
 		ensureDir(filepath.Dir(thisConfig.Consensus.WalFile())) // dir for wal
-		app := appFunc()
-		vals := types.TM2PB.ValidatorUpdates(state.Validators)
-		_, err := app.InitChain(context.Background(), &abci.InitChainRequest{Validators: vals})
+
+		var (
+			app  = appFunc()
+			vals = types.TM2PB.ValidatorUpdates(state.Validators)
+		)
+		_, err := app.InitChain(
+			context.Background(),
+			&abci.InitChainRequest{Validators: vals},
+		)
 		require.NoError(t, err)
 
-		css[i] = newStateWithConfigAndBlockStore(thisConfig, state, privVals[i], app, stateDB)
+		css[i] = newStateWithConfigAndBlockStore(
+			thisConfig,
+			state,
+			privVals[i],
+			app,
+			stateDB,
+		)
 		css[i].SetTimeoutTicker(tickerFunc())
 		css[i].SetLogger(logger.With("validator", i, "module", "consensus"))
 	}
+
 	return css, func() {
 		for _, dir := range configRootDirs {
 			os.RemoveAll(dir)
@@ -1085,6 +1110,12 @@ func newPersistentKVStore() abci.Application {
 
 func newKVStore() abci.Application {
 	return kvstore.NewInMemoryApplication()
+}
+
+func newKVStoreWithBlob() abci.Application {
+	app := kvstore.NewInMemoryApplication()
+	app.SetGenerateBlobs()
+	return app
 }
 
 func newPersistentKVStoreWithPathAndBlob(dbDir string) abci.Application {
