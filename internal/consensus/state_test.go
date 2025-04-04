@@ -2026,7 +2026,7 @@ func TestState_MissingProposalValidBlockReceivedTimeout(t *testing.T) {
 // misses the round's Proposal, but receives a Polka for a block and the full
 // block, precommits the valid block even though the Proposal is missing.
 func TestState_MissingProposalValidBlockReceivedPrecommit(t *testing.T) {
-	cs1, vss := randState(4)
+	cs1, vss := randStateWithBlob(4)
 	height, round := cs1.Height, cs1.Round
 	chainID := cs1.state.ChainID
 
@@ -2035,7 +2035,7 @@ func TestState_MissingProposalValidBlockReceivedPrecommit(t *testing.T) {
 	voteCh := subscribe(cs1.eventBus, types.EventQueryVote)
 
 	// Produce a block
-	_, blockParts, blockID := createProposalBlock(t, cs1)
+	_, blockParts, blockID, blob := createProposalBlockAndBlob(t, cs1)
 
 	// Skip round 0 and start consensus
 	round++
@@ -2057,12 +2057,29 @@ func TestState_MissingProposalValidBlockReceivedPrecommit(t *testing.T) {
 		round,
 		cs1.config.Propose(round).Nanoseconds(),
 	)
+
+	rs := cs1.GetRoundState()
+	// We have seen the votes for a valid block, but not the proposal. Therefore,
+	// the blob should be absent.
+	require.Empty(t, rs.ProposalBlob, "blob should be empty")
+	require.Nil(t, rs.ProposalBlobParts, "blob parts should be nil")
+
 	ensurePrevote(voteCh, height, round)
 	validatePrevote(t, cs1, round, vss[0], nil)
 
 	// We accept the full block associated with the valid blockID
 	for i := 0; i < int(blockParts.Total()); i++ {
 		err := cs1.AddProposalBlockPart(height, round, blockParts.GetPart(i), "peer")
+		require.NoError(t, err)
+	}
+
+	blobParts := types.NewPartSetFromData(blob, types.PartSizeBytes)
+	for i := 0; i < int(blobParts.Total()); i++ {
+		// In this case, if we receive any blob parts for the block, they will be
+		// ignored, because we didn't receive the round's Proposal.
+		// You’ll see a log message like: "received a blob part when we are not
+		// expecting any".
+		err := cs1.AddProposalBlobPart(height, round, blobParts.GetPart(i), "peer")
 		require.NoError(t, err)
 	}
 
