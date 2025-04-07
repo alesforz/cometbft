@@ -2523,12 +2523,13 @@ func (cs *State) addProposalBlobPart(msg *BlobPartMessage, peerID p2p.ID) (added
 	}
 
 	cs.metrics.BlobGossipPartsReceived.With("matches_current", "true").Add(1)
+  
 	if !added {
 		// NOTE: we are disregarding possible duplicates above where heights dont match or we're not expecting blob parts yet
 		// but between the matches_current = true and false, we have all the info.
 		cs.metrics.DuplicateBlobPart.Add(1)
 	} else {
-		cs.evsw.FireEvent(types.EventProposalBlobPart, msg)
+    cs.evsw.FireEvent(types.EventProposalBlobPart, msg)
 	}
 
 	count, total := cs.ProposalBlobParts.Count(), cs.ProposalBlobParts.Total()
