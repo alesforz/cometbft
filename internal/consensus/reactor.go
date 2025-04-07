@@ -2051,7 +2051,7 @@ func (m *BlockPartMessage) ValidateBasic() error {
 	if m.Round < 0 {
 		return cmterrors.ErrNegativeField{Field: "Round"}
 	}
-	if err := m.Part.ValidateBasic(types.PartSetTypeBlock); err != nil {
+	if err := m.Part.ValidateBasic(); err != nil {
 		return cmterrors.ErrWrongField{Field: "Part", Err: err}
 	}
 	return nil
@@ -2080,7 +2080,7 @@ func (m *BlobPartMessage) ValidateBasic() error {
 	if m.Round < 0 {
 		return cmterrors.ErrNegativeField{Field: "Round"}
 	}
-	if err := m.Part.ValidateBasic(types.PartSetTypeBlob); err != nil {
+	if err := m.Part.ValidateBasic(); err != nil {
 		return cmterrors.ErrWrongField{Field: "Part", Err: err}
 	}
 	return nil

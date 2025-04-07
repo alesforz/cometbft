@@ -240,7 +240,7 @@ func createProposalBlockWithTimeAndBlob(t *testing.T, cs *State, time time.Time)
 		block.Time = cmttime.Canonical(time)
 	}
 	assert.NoError(t, err)
-	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	blockParts, err := block.MakePartSet(types.PartSizeBytes)
 	assert.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
 	return block, blockParts, blockID, blob
@@ -258,7 +258,7 @@ func createProposalBlockWithTime(t *testing.T, cs *State, time time.Time) (*type
 		block.Time = cmttime.Canonical(time)
 	}
 	assert.NoError(t, err)
-	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	blockParts, err := block.MakePartSet(types.PartSizeBytes)
 	assert.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
 	return block, blockParts, blockID
@@ -277,14 +277,14 @@ func decideProposal(
 	vs *validatorStub,
 	height int64,
 	round int32,
-) (*types.Proposal, *types.Block) {
+) (*types.Proposal, *types.Block, types.Blob) {
 	t.Helper()
 
 	cs1.mtx.Lock()
 	var (
-		block, _, propBlockID = createProposalBlock(t, cs1)
-		validRound            = cs1.ValidRound
-		chainID               = cs1.state.ChainID
+		block, _, propBlockID, blob = createProposalBlockAndBlob(t, cs1)
+		validRound                  = cs1.ValidRound
+		chainID                     = cs1.state.ChainID
 	)
 	cs1.mtx.Unlock()
 
@@ -293,6 +293,12 @@ func decideProposal(
 	}
 
 	var (
+		blobParts = types.NewPartSetFromData(blob, types.PartSizeBytes)
+		blobID    = types.BlobID{
+			Hash:          blob.Hash(),
+			PartSetHeader: blobParts.Header(),
+		}
+
 		// Make proposal
 		proposal = types.NewProposal(
 			height,
@@ -300,7 +306,7 @@ func decideProposal(
 			validRound,
 			propBlockID,
 			block.Header.Time,
-			types.BlobID{},
+			blobID,
 		)
 		p = proposal.ToProto()
 	)
@@ -310,7 +316,7 @@ func decideProposal(
 
 	proposal.Signature = p.Signature
 
-	return proposal, block
+	return proposal, block, blob
 }
 
 func addVotes(to *State, votes ...*types.Vote) {
@@ -728,7 +734,7 @@ func ensureRelock(relockCh <-chan cmtpubsub.Message, height int64, round int32) 
 		"Timeout expired while waiting for RelockValue event")
 }
 
-func ensureProposalWithTimeout(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID *types.BlockID, blobID *types.BlobID, timeout time.Duration) {
+func ensureProposalWithTimeout(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID *types.BlockID, blobID types.BlobID, timeout time.Duration) {
 	select {
 	case <-time.After(timeout):
 		panic("Timeout expired while waiting for NewProposal event")
@@ -749,25 +755,25 @@ func ensureProposalWithTimeout(proposalCh <-chan cmtpubsub.Message, height int64
 				panic(fmt.Sprintf("Proposed block does not match expected block (%v != %v)", proposalEvent.BlockID, *propID))
 			}
 		}
-		if blobID != nil {
+		if !blobID.IsNil() {
 			if !bytes.Equal(proposalEvent.BlobID.Hash, blobID.Hash) {
-				panic(fmt.Sprintf("Proposed blob does not match expected block (%v != %v)", proposalEvent.BlockID, *propID))
+				panic(fmt.Sprintf("Proposed blob does not match expected blob (%v != %v)", proposalEvent.BlobID, blobID))
 			}
 		}
 	}
 }
 
 func ensureProposalWithBlob(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID types.BlockID, blobID types.BlobID) {
-	ensureProposalWithTimeout(proposalCh, height, round, &propID, &blobID, ensureTimeout)
+	ensureProposalWithTimeout(proposalCh, height, round, &propID, blobID, ensureTimeout)
 }
 
 func ensureProposal(proposalCh <-chan cmtpubsub.Message, height int64, round int32, propID types.BlockID) {
-	ensureProposalWithTimeout(proposalCh, height, round, &propID, nil, ensureTimeout)
+	ensureProposalWithTimeout(proposalCh, height, round, &propID, types.BlobID{}, ensureTimeout)
 }
 
 // For the propose, as we do not know the blockID in advance.
 func ensureNewProposal(proposalCh <-chan cmtpubsub.Message, height int64, round int32) {
-	ensureProposalWithTimeout(proposalCh, height, round, nil, nil, ensureTimeout)
+	ensureProposalWithTimeout(proposalCh, height, round, nil, types.BlobID{}, ensureTimeout)
 }
 
 func ensurePrecommit(voteCh <-chan cmtpubsub.Message, height int64, round int32) {
@@ -859,35 +865,60 @@ func consensusLogger() log.Logger {
 	}).With("module", "consensus")
 }
 
-func randConsensusNet(t *testing.T, nValidators int, testName string, tickerFunc func() TimeoutTicker,
-	appFunc func() abci.Application, configOpts ...func(*cfg.Config),
+func randConsensusNet(
+	t *testing.T,
+	nValidators int,
+	testName string,
+	tickerFunc func() TimeoutTicker,
+	appFunc func() abci.Application,
+	configOpts ...func(*cfg.Config),
 ) ([]*State, cleanupFunc) {
 	t.Helper()
-	genDoc, privVals := randGenesisDoc(nValidators, 30, nil, cmttime.Now())
-	css := make([]*State, nValidators)
-	logger := consensusLogger()
-	configRootDirs := make([]string, 0, nValidators)
+
+	var (
+		genDoc, privVals = randGenesisDoc(nValidators, 30, nil, cmttime.Now())
+		css              = make([]*State, nValidators)
+		logger           = consensusLogger()
+		configRootDirs   = make([]string, 0, nValidators)
+	)
 	for i := 0; i < nValidators; i++ {
-		stateDB := dbm.NewMemDB() // each state needs its own db
-		stateStore := sm.NewStore(stateDB, sm.StoreOptions{
-			DiscardABCIResponses: false,
-		})
-		state, _ := stateStore.LoadFromDBOrGenesisDoc(genDoc)
-		thisConfig := ResetConfig(fmt.Sprintf("%s_%d", testName, i))
+		var (
+			stateDB    = dbm.NewMemDB() // each state needs its own db
+			stateStore = sm.NewStore(stateDB, sm.StoreOptions{
+				DiscardABCIResponses: false,
+			})
+			state, _   = stateStore.LoadFromDBOrGenesisDoc(genDoc)
+			thisConfig = ResetConfig(fmt.Sprintf("%s_%d", testName, i))
+		)
+
 		configRootDirs = append(configRootDirs, thisConfig.RootDir)
 		for _, opt := range configOpts {
 			opt(thisConfig)
 		}
+
 		ensureDir(filepath.Dir(thisConfig.Consensus.WalFile())) // dir for wal
-		app := appFunc()
-		vals := types.TM2PB.ValidatorUpdates(state.Validators)
-		_, err := app.InitChain(context.Background(), &abci.InitChainRequest{Validators: vals})
+
+		var (
+			app  = appFunc()
+			vals = types.TM2PB.ValidatorUpdates(state.Validators)
+		)
+		_, err := app.InitChain(
+			context.Background(),
+			&abci.InitChainRequest{Validators: vals},
+		)
 		require.NoError(t, err)
 
-		css[i] = newStateWithConfigAndBlockStore(thisConfig, state, privVals[i], app, stateDB)
+		css[i] = newStateWithConfigAndBlockStore(
+			thisConfig,
+			state,
+			privVals[i],
+			app,
+			stateDB,
+		)
 		css[i].SetTimeoutTicker(tickerFunc())
 		css[i].SetLogger(logger.With("validator", i, "module", "consensus"))
 	}
+
 	return css, func() {
 		for _, dir := range configRootDirs {
 			os.RemoveAll(dir)
@@ -1079,6 +1110,12 @@ func newPersistentKVStore() abci.Application {
 
 func newKVStore() abci.Application {
 	return kvstore.NewInMemoryApplication()
+}
+
+func newKVStoreWithBlob() abci.Application {
+	app := kvstore.NewInMemoryApplication()
+	app.SetGenerateBlobs()
+	return app
 }
 
 func newPersistentKVStoreWithPathAndBlob(dbDir string) abci.Application {

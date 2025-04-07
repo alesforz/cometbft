@@ -163,7 +163,7 @@ func (b *Block) MakePartSet(partSize uint32) (*PartSet, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewPartSetFromData(bz, partSize, PartSetTypeBlock), nil
+	return NewPartSetFromData(bz, partSize), nil
 }
 
 // HashesTo is a convenience function that checks if a block hashes to the given argument.
@@ -279,16 +279,6 @@ func BlockFromProto(bp *cmtproto.Block) (*Block, error) {
 	}
 
 	return b, b.ValidateBasic()
-}
-
-// BlobFromProto sets a protobuf Blob to the given pointer.
-// It returns an error if the blob does not exist.
-func BlobFromProto(bp *cmtproto.Blob) (Blob, error) {
-	if bp == nil {
-		return nil, errors.New("nil blob")
-	}
-
-	return bp.Data, nil
 }
 
 // -----------------------------------------------------------------------------
