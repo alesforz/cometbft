@@ -155,7 +155,10 @@ func NewTestnetFromManifest(manifest Manifest, file string, ifd InfrastructureDa
 
 	if testnet.InitialHeight == 0 {
 		testnet.InitialHeight = 1
-		testnet.BlobMaxBytesUpdateHeight = testnet.BlobMaxBytesUpdateHeight + testnet.InitialHeight
+
+		if testnet.BlobMaxBytesUpdateHeight != -1 {
+			testnet.BlobMaxBytesUpdateHeight = testnet.BlobMaxBytesUpdateHeight + testnet.InitialHeight
+		}
 	}
 	if testnet.ABCIProtocol == "" {
 		testnet.ABCIProtocol = string(ProtocolBuiltin)
@@ -377,7 +380,34 @@ func (t Testnet) Validate() error {
 	}
 
 	if !(t.BlobMaxBytesUpdateHeight == -1 || t.BlobMaxBytesUpdateHeight == t.InitialHeight || t.BlobMaxBytesUpdateHeight == t.InitialHeight+100) {
-		return fmt.Errorf("the value of BlobMaxBytesUpdateHeight must be either -1 (disabled) , 0 (InitChain) or 100(height 100): %d ", t.BlobMaxBytesUpdateHeight+t.InitialHeight)
+		return fmt.Errorf("the value of BlobMaxBytesUpdateHeight must be either -1 (disabled) , 0 (InitChain) or 100(height 100): %d ", t.BlobMaxBytesUpdateHeight)
+	}
+	if t.PbtsEnableHeight < 0 {
+		return fmt.Errorf("value of PbtsEnableHeight must be positive, or 0 (disable); "+
+			"enable height %d", t.PbtsEnableHeight)
+	}
+	if t.PbtsUpdateHeight > 0 && t.PbtsUpdateHeight < t.InitialHeight {
+		return fmt.Errorf("a value of PbtsUpdateHeight greater than 0 "+
+			"must not be less than InitialHeight; "+
+			"update height %d, initial height %d",
+			t.PbtsUpdateHeight, t.InitialHeight,
+		)
+	}
+	if t.PbtsEnableHeight > 0 {
+		if t.PbtsEnableHeight < t.InitialHeight {
+			return fmt.Errorf("a value of PbtsEnableHeight greater than 0 "+
+				"must not be less than InitialHeight; "+
+				"enable height %d, initial height %d",
+				t.PbtsEnableHeight, t.InitialHeight,
+			)
+		}
+		if t.PbtsEnableHeight <= t.PbtsUpdateHeight {
+			return fmt.Errorf("a value of PbtsEnableHeight greater than 0 "+
+				"must be greater than PbtsUpdateHeight; "+
+				"update height %d, enable height %d",
+				t.PbtsUpdateHeight, t.PbtsEnableHeight,
+			)
+		}
 	}
 	if t.PbtsEnableHeight < 0 {
 		return fmt.Errorf("value of PbtsEnableHeight must be positive, or 0 (disable); "+
