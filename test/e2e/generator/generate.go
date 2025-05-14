@@ -68,7 +68,7 @@ var (
 	pbtsUpdateHeight           = uniformChoice{int64(-1)}                                    // -1: genesis, 0: InitChain, 1: (use offset)
 	pbtsEnabled                = weightedChoice{true: 1}
 	pbtsHeightOffset           = uniformChoice{int64(0)}
-	blobMaxBytesUpdateHeight  = uniformChoice{int64(-1), int64(0), int64(100)}
+	blobMaxBytesUpdateHeight  = uniformChoice{int64(-1), int64(0), int64(10)}
 )
 
 type generateConfig struct {
