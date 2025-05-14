@@ -72,14 +72,16 @@ const (
 type Testnet struct {
 	Manifest
 
-	Name string
-	File string
-	Dir  string
-
-	IP               *net.IPNet
-	Validators       map[*Node]int64
-	ValidatorUpdates map[int64]map[*Node]int64
-	Nodes            []*Node
+	Name                                                 string
+	File                                                 string
+	Dir                                                  string
+	IP                                                   *net.IPNet
+	InitialHeight                                        int64
+	InitialState                                         map[string]string
+	Validators                                           map[*Node]int64
+	ValidatorUpdates                                     map[int64]map[*Node]int64
+	Nodes                                                []*Node
+	BlobMaxBytesUpdateHeight                             int64
 
 	// Latency Emulation is enabled when all the nodes have a zone assigned.
 	LatencyEmulationEnabled bool
@@ -140,19 +142,20 @@ func NewTestnetFromManifest(manifest Manifest, file string, ifd InfrastructureDa
 	}
 
 	testnet := &Testnet{
-		Manifest: manifest,
-
-		Name: filepath.Base(dir),
-		File: file,
-		Dir:  dir,
-
-		IP:               ipNet,
-		Validators:       map[*Node]int64{},
-		ValidatorUpdates: map[int64]map[*Node]int64{},
-		Nodes:            []*Node{},
+		Manifest:				 manifest,
+		Name:                       filepath.Base(dir),
+		File:                       file,
+		Dir:                        dir,
+		IP:                         ipNet,
+		Validators:                 map[*Node]int64{},
+		ValidatorUpdates:           map[int64]map[*Node]int64{},
+		Nodes:                      []*Node{},
+		BlobMaxBytesUpdateHeight: manifest.BlobMaxBytesUpdateHeight,
 	}
+
 	if testnet.InitialHeight == 0 {
 		testnet.InitialHeight = 1
+		testnet.BlobMaxBytesUpdateHeight = testnet.BlobMaxBytesUpdateHeight + testnet.InitialHeight
 	}
 	if testnet.ABCIProtocol == "" {
 		testnet.ABCIProtocol = string(ProtocolBuiltin)
@@ -371,6 +374,10 @@ func (t Testnet) Validate() error {
 				t.VoteExtensionsUpdateHeight, t.VoteExtensionsEnableHeight,
 			)
 		}
+	}
+
+	if !(t.BlobMaxBytesUpdateHeight == -1 || t.BlobMaxBytesUpdateHeight == t.InitialHeight || t.BlobMaxBytesUpdateHeight == t.InitialHeight+100) {
+		return fmt.Errorf("the value of BlobMaxBytesUpdateHeight must be either -1 (disabled) , 0 (InitChain) or 100(height 100): %d ", t.BlobMaxBytesUpdateHeight+t.InitialHeight)
 	}
 	if t.PbtsEnableHeight < 0 {
 		return fmt.Errorf("value of PbtsEnableHeight must be positive, or 0 (disable); "+

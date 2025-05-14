@@ -62,12 +62,13 @@ var (
 		"upgrade": 0.3,
 	}
 	voteExtensionsUpdateHeight = uniformChoice{int64(-1), int64(0), int64(1)} // -1: genesis, 0: InitChain, 1: (use offset)
-	voteExtensionEnabled       = weightedChoice{false: 1}
+	voteExtensionEnabled      = weightedChoice{false: 1}
 	voteExtensionsHeightOffset = uniformChoice{int64(0), int64(10), int64(100)}
 	voteExtensionSize          = uniformChoice{uint(128), uint(512), uint(2048), uint(8192)} // TODO: define the right values depending on experiment results.
 	pbtsUpdateHeight           = uniformChoice{int64(-1)}                                    // -1: genesis, 0: InitChain, 1: (use offset)
 	pbtsEnabled                = weightedChoice{true: 1}
 	pbtsHeightOffset           = uniformChoice{int64(0)}
+	blobMaxBytesUpdateHeight  = uniformChoice{int64(-1), int64(0), int64(100)}
 )
 
 type generateConfig struct {
@@ -178,6 +179,12 @@ func generateTestnet(r *rand.Rand, opt map[string]any, upgradeVersion string, pr
 	}
 
 	// TODO: Add skew config
+	manifest.BlobMaxBytesUpdateHeight = blobMaxBytesUpdateHeight.Choose(r).(int64)
+
+	if manifest.BlobMaxBytesUpdateHeight != -1 && manifest.BlobMaxBytesUpdateHeight < manifest.InitialHeight {
+		manifest.BlobMaxBytesUpdateHeight = manifest.InitialHeight + manifest.BlobMaxBytesUpdateHeight
+	}
+
 	var numSeeds, numValidators, numFulls, numLightClients int
 	switch opt["topology"].(string) {
 	case "single":

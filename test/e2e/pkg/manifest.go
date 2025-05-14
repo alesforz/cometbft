@@ -104,7 +104,7 @@ type Manifest struct {
 
 	// BlobMaxBytes specifies the maximum size in bytes of a blob. This
 	// value will be written to the genesis file of all nodes.
-	BlobMaxBytes int64 `toml:"blob_max_bytes"`
+	//BlobMaxBytes int64 `toml:"blob_max_bytes"`
 
 	// Defines a minimum size for the vote extensions.
 	VoteExtensionSize uint `toml:"vote_extension_size"`
@@ -155,6 +155,9 @@ type Manifest struct {
 	// configuration files for all nodes. The format is "key = value".
 	// Example: "p2p.send_rate = 512000".
 	Config []string `toml:"config"`
+
+	// Height at which we set the max blob size to be something other than 0
+	BlobMaxBytesUpdateHeight int64 `toml:"blob_max_bytes_update_height"`
 }
 
 // ManifestNode represents a node in a testnet manifest.
