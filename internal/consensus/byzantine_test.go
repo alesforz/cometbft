@@ -313,14 +313,8 @@ func TestByzantineConflictingProposalsWithPartition(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	app := newKVStoreWithBlob
-	css, cleanup := randConsensusNet(
-		t,
-		n,
-		"consensus_byzantine_test",
-		newMockTickerFunc(false),
-		app,
-	)
+	app := newKVStore
+	css, cleanup := randConsensusNet(t, n, "consensus_byzantine_test", newMockTickerFunc(false), app)
 	defer cleanup()
 
 	// give the byzantine validator a normal ticker
