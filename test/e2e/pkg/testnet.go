@@ -82,6 +82,7 @@ type Testnet struct {
 	ValidatorUpdates                                     map[int64]map[*Node]int64
 	Nodes                                                []*Node
 	BlobMaxBytesUpdateHeight                             int64
+	BlobMaxBytes                                         int64
 
 	// Latency Emulation is enabled when all the nodes have a zone assigned.
 	LatencyEmulationEnabled bool
