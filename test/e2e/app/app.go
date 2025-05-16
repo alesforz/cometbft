@@ -735,7 +735,7 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.ProcessProp
 	}
 
 	if app.checkBlobHeight(req.Height, "ProcessProposal") {
-		fmt.Println("BLOB: ", req.Blob)
+		app.logger.Debug("Blob: ", req.Blob)
 
 
 		if !VerifyBlob(req.Height, req.Blob, app.cfg.BlobMaxBytesUpdateHeight) {
