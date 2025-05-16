@@ -14,7 +14,9 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 
 	e2e "github.com/cometbft/cometbft/test/e2e/pkg"
+	"github.com/cometbft/cometbft/types"
 	"github.com/cometbft/cometbft/version"
+
 )
 
 var (
@@ -68,7 +70,8 @@ var (
 	pbtsUpdateHeight           = uniformChoice{int64(-1)}                                    // -1: genesis, 0: InitChain, 1: (use offset)
 	pbtsEnabled                = weightedChoice{true: 1}
 	pbtsHeightOffset           = uniformChoice{int64(0)}
-	blobMaxBytesUpdateHeight  = uniformChoice{int64(-1), int64(0), int64(10)}
+	blobMaxBytesUpdateHeight  = uniformChoice{int64(-1), int64(0), int64(1)}
+	blobHeightOffset          = uniformChoice{int64(0), int64(10), int64(100)}
 )
 
 type generateConfig struct {
@@ -181,10 +184,14 @@ func generateTestnet(r *rand.Rand, opt map[string]any, upgradeVersion string, pr
 	// TODO: Add skew config
 	manifest.BlobMaxBytesUpdateHeight = blobMaxBytesUpdateHeight.Choose(r).(int64)
 
-	if manifest.BlobMaxBytesUpdateHeight != -1 && manifest.BlobMaxBytesUpdateHeight < manifest.InitialHeight {
-		manifest.BlobMaxBytesUpdateHeight = manifest.InitialHeight + manifest.BlobMaxBytesUpdateHeight
+	if manifest.BlobMaxBytesUpdateHeight == 1 {
+		manifest.BlobMaxBytesUpdateHeight = manifest.InitialHeight + blobHeightOffset.Choose(r).(int64)
+		manifest.BlobMaxBytes = types.MaxBlobSizeBytes
 	}
 
+	if manifest.BlobMaxBytesUpdateHeight == 0 {
+		manifest.BlobMaxBytes = types.MaxBlobSizeBytes
+	}
 	var numSeeds, numValidators, numFulls, numLightClients int
 	switch opt["topology"].(string) {
 	case "single":

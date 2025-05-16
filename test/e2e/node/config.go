@@ -51,6 +51,7 @@ type Config struct {
 	PbtsEnableHeight int64 `toml:"pbts_enable_height"`
 	PbtsUpdateHeight int64 `toml:"pbts_update_height"`
 	BlobMaxBytesUpdateHeight   int64                       `toml:"blob_max_bytes_update_height"`
+	BlobMaxBytes               int64                       `toml:"blob_max_bytes"`
 }
 
 // App extracts out the application specific configuration parameters.
@@ -74,6 +75,7 @@ func (cfg *Config) App() *app.Config {
 		PbtsEnableHeight:           cfg.PbtsEnableHeight,
 		PbtsUpdateHeight:           cfg.PbtsUpdateHeight,
 		BlobMaxBytesUpdateHeight:   cfg.BlobMaxBytesUpdateHeight,
+		BlobMaxBytes:               cfg.BlobMaxBytes,
 	}
 }
 

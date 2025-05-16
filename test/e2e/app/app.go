@@ -127,7 +127,10 @@ type Config struct {
 	VoteExtensionsUpdateHeight int64 `toml:"vote_extensions_update_height"`
 
 	// BlobMaxBytesUpdateHeight configures the height at which the
-	// blob max bytes is set to something other than 0
+	// blob max bytes consensus parameters are updated
+	// -1 means the max_bytes value is set at genesis
+	// 0 means the max_bytes value is set at InitChain
+	// >0 means the max_bytes value is set at the given height
 	BlobMaxBytesUpdateHeight int64 `toml:"blob_max_bytes_update_height"`
 
 	// Flag for enabling and disabling logging of ABCI requests.
@@ -143,6 +146,9 @@ type Config struct {
 	// -1 denotes it is set at genesis.
 	// 0 denotes it is set at InitChain.
 	PbtsUpdateHeight int64 `toml:"pbts_update_height"`
+
+	// BlobMaxBytes is the values of max bytes for blobs
+	BlobMaxBytes int64 `toml:"blob_max_bytes"`
 }
 
 func DefaultConfig(dir string) *Config {
@@ -162,9 +168,7 @@ func DefaultConfig(dir string) *Config {
 // 3 - blob is variable length string that contains "BLOBXXX" where XXX is height multiplied by 0x80 in hex
 // 4 - blob is the size of MaxBlobSizeBytes and contains height truncated into two bytes repeated.
 func blobOracle(height int64, blobMaxBytesUpdateHeight int64) ([]byte, bool) {
-	if height <= blobMaxBytesUpdateHeight || blobMaxBytesUpdateHeight == -1 {
-		return nil, false
-	}
+
 	switch height % 4 {
 	case 1:
 		truncatedHeight := byte(height % 0x100)
@@ -253,16 +257,16 @@ func (app *Application) updateBlobMaxBytes(currentHeight int64, params *cmtproto
 	if params == nil {
 		params = &cmtproto.ConsensusParams{}
 	}
-	if app.cfg.BlobMaxBytesUpdateHeight != 1 && app.cfg.BlobMaxBytesUpdateHeight == currentHeight {
+	if app.cfg.BlobMaxBytesUpdateHeight == currentHeight {
 		app.logger.Info("updating blob max bytes on the fly",
 			"current_height", currentHeight,
 			"blob_max_bytes_update_height", app.cfg.BlobMaxBytesUpdateHeight)
 		params.Blob = &cmtproto.BlobParams{
-			MaxBytes: cmttypes.MaxBlobSizeBytes,
+			MaxBytes: app.cfg.BlobMaxBytes,
 		}
 
-		app.logger.Info("updating blob max bytes in app_state", "height", app.cfg.BlobMaxBytesUpdateHeight)
-		app.state.Set(prefixReservedKey+suffixBlobMaxBytes, strconv.FormatInt(app.cfg.BlobMaxBytesUpdateHeight, 10))
+		app.logger.Info("updating blob max bytes in app_state", "height", app.cfg.BlobMaxBytes)
+		app.state.Set(prefixReservedKey+suffixBlobMaxBytes, strconv.FormatInt(app.cfg.BlobMaxBytes, 10))
 	}
 	return params
 }
@@ -332,6 +336,8 @@ func (app *Application) InitChain(_ context.Context, req *abci.InitChainRequest)
 
 	params := app.updateFeatureEnableHeights(0)
 
+	params = app.updateBlobMaxBytes(0, params)
+
 	resp := &abci.InitChainResponse{
 		ConsensusParams: params,
 		AppHash:         app.state.GetHash(),
@@ -389,7 +395,7 @@ func (app *Application) CheckTx(_ context.Context, req *abci.CheckTxRequest) (*a
 // and the blob itself.
 // If query through the network is not possible, it returns with an error.
 func (app *Application) GetBlob(height int64) ([]byte, bool, error) {
-	if height <= app.cfg.BlobMaxBytesUpdateHeight || app.cfg.BlobMaxBytesUpdateHeight == -1 {
+	if !app.checkBlobHeight(height, "getBlob") {
 		// Blob max bytes is still 0 so we cannot send a blob
 		return nil, false, nil
 	}
@@ -437,18 +443,20 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.FinalizeBlock
 	}
 
 	// Verify blob.
-	blob, exists, err := app.GetBlob(req.Height)
-	if err != nil {
-		return nil, fmt.Errorf("could not fetch blob for height %d, %s", req.Height, err.Error())
-	}
-	if exists && !VerifyBlob(req.Height, blob, app.cfg.BlobMaxBytesUpdateHeight) {
-		return nil, fmt.Errorf("blob verification failed for height %d", req.Height)
-	}
+	if app.checkBlobHeight(req.Height, "FinalizeBlock") {
+		blob, exists, err := app.GetBlob(req.Height)
+		if err != nil {
+			return nil, fmt.Errorf("could not fetch blob for height %d, %s", req.Height, err.Error())
+		}
+		if exists && !VerifyBlob(req.Height, blob, app.cfg.BlobMaxBytesUpdateHeight) {
+			return nil, fmt.Errorf("blob verification failed for height %d", req.Height)
+		}
 
-	// This is a short-term cache so we delete the entry after we received it.
-	delete(app.blobCache, req.Height)
-	if len(app.blobCache) != 0 {
-		app.logger.Error("blob cache should be empty", "size", len(app.blobCache))
+		// This is a short-term cache so we delete the entry after we received it.
+		delete(app.blobCache, req.Height)
+		if len(app.blobCache) != 0 {
+			app.logger.Error("blob cache should be empty", "size", len(app.blobCache))
+		}
 	}
 
 	for _, ev := range req.Misbehavior {
@@ -694,9 +702,12 @@ func (app *Application) PrepareProposal(
 		// Coherence: No need to call parseTx, as the check is stateless and has been performed by CheckTx
 		txs = append(txs, tx)
 	}
+	var blob []byte
+	var exists bool
 	// Generate blob for the current height.
-	blob, exists := CreateBlob(req.Height, app.cfg.BlobMaxBytesUpdateHeight)
-
+	if app.checkBlobHeight(req.Height, "prepare_proposal") {
+		blob, exists = CreateBlob(req.Height, app.cfg.BlobMaxBytesUpdateHeight)
+	}
 	if app.cfg.PrepareProposalDelay != 0 {
 		time.Sleep(app.cfg.PrepareProposalDelay)
 	}
@@ -713,26 +724,35 @@ func (app *Application) PrepareProposal(
 // NOTE It is up to real Applications to effect punitive behavior in the cases ProcessProposal
 // returns PROCESS_PROPOSAL_STATUS_REJECT, as it is evidence of misbehavior.
 func (app *Application) ProcessProposal(_ context.Context, req *abci.ProcessProposalRequest) (*abci.ProcessProposalResponse, error) {
-	r := &abci.Request{Value: &abci.Request_ProcessProposal{ProcessProposal: &abci.ProcessProposalRequest{}}}
+	r := &abci.Request{
+		Value: &abci.Request_ProcessProposal{
+			ProcessProposal: &abci.ProcessProposalRequest{},
+		},
+	}
 	err := app.logABCIRequest(r)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Println("BLOB: ", req.Blob)
+	if app.checkBlobHeight(req.Height, "ProcessProposal") {
+		fmt.Println("BLOB: ", req.Blob)
 
-	if !VerifyBlob(req.Height, req.Blob, app.cfg.BlobMaxBytesUpdateHeight) {
-		app.logger.Error("invalid blob, rejecting proposal", "received height", req.Height, "received", req.Blob)
-		return &abci.ProcessProposalResponse{Status: abci.PROCESS_PROPOSAL_STATUS_REJECT}, nil
-	}
-	// Blob verification
-	if len(req.Blob) != 0 {
-		// Proposal will be accepted by us and blob exists and valid, so we store it in the cache.
-		app.blobCache[req.Height] = req.Blob
-	} else {
-		// Proposal will be accepted by us and there is no blob.
-		// We make a note of it in the cache so we can inform FinalizeBlock. A real application will have better methods for this.
-		app.blobCache[req.Height] = noBlobBytes()
+
+		if !VerifyBlob(req.Height, req.Blob, app.cfg.BlobMaxBytesUpdateHeight) {
+			app.logger.Error("invalid blob, rejecting proposal", "received height", req.Height, "received", req.Blob)
+			return &abci.ProcessProposalResponse{
+				Status: abci.PROCESS_PROPOSAL_STATUS_REJECT,
+			}, nil
+		}
+		// Blob verification
+		if len(req.Blob) != 0 {
+			// Proposal will be accepted by us and blob exists and valid, so we store it in the cache.
+			app.blobCache[req.Height] = req.Blob
+		} else {
+			// Proposal will be accepted by us and there is no blob.
+			// We make a note of it in the cache so we can inform FinalizeBlock. A real application will have better methods for this.
+			app.blobCache[req.Height] = noBlobBytes()
+		}
 	}
 
 	_, areExtensionsEnabled := app.checkHeightAndExtensions(true, req.Height, "ProcessProposal")
@@ -868,6 +888,31 @@ func (app *Application) getAppHeight() int64 {
 		appHeight = initialHeight - 1
 	}
 	return appHeight + 1
+}
+
+func (app *Application) checkBlobHeight(height int64, callsite string) bool {
+	appHeight := app.getAppHeight()
+	if height != appHeight {
+		panic(fmt.Errorf(
+			"got unexpected height in %s request; expected %d, actual %d",
+			callsite, appHeight, height,
+		))
+	}
+	if appHeight <= app.cfg.BlobMaxBytesUpdateHeight {
+		return false
+	}
+	blobMaxBytesStr := app.state.Get(prefixReservedKey + suffixBlobMaxBytes)
+	if len(blobMaxBytesStr) == 0 {
+		panic("blob max bytes not set in database")
+	}
+	blobMaxBytes, err := strconv.ParseInt(blobMaxBytesStr, 10, 64)
+	if err != nil {
+		panic(fmt.Errorf("malformed blob max bytes %q in database", blobMaxBytesStr))
+	}
+	if blobMaxBytes == 0 {
+		return false
+	}
+	return true
 }
 
 func (app *Application) checkHeightAndExtensions(isPrepareProcessProposal bool, height int64, callsite string) (int64, bool) {
