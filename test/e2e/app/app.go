@@ -158,14 +158,13 @@ func DefaultConfig(dir string) *Config {
 
 // blobOracle can tell you the expected blob on a specific height.
 // It can be used to add blobs to proposals or simulate network peer responses.
-// Blob properties: height modulo 4
+// Blob properties: height modulo 5
 // 0 - no blob
 // 1 - blob is exactly 8 bytes long and contains the height truncated into a byte 8 times
 // 2 - blob is empty ([]byte{})
 // 3 - blob is variable length string that contains "BLOBXXX" where XXX is height multiplied by 0x80 in hex
 // 4 - blob is the size of MaxBlobSizeBytes and contains height truncated into two bytes repeated.
-func blobOracle(height int64, blobMaxBytesUpdateHeight int64) ([]byte, bool) {
-
+func blobOracle(height int64) ([]byte, bool) {
 	switch height % 5 {
 	case 1:
 		truncatedHeight := byte(height % 0x100)
@@ -177,7 +176,7 @@ func blobOracle(height int64, blobMaxBytesUpdateHeight int64) ([]byte, bool) {
 		return []byte(fmt.Sprintf("BLOB%x", height*0x80)), true
 	case 4:
 		truncatedHeight := byte(height % 0x10000)
-		data := bytes.Repeat([]byte{truncatedHeight}, cmttypes.MaxBlobSizeBytes/4)
+		data := bytes.Repeat([]byte{truncatedHeight}, cmttypes.MaxBlobSizeBytes)
 		return data, true
 	}
 	return nil, false
@@ -194,14 +193,14 @@ func isBlob(blob []byte) bool {
 }
 
 // CreateBlob creates a new blob for a proposal at this height.
-func CreateBlob(height int64, blobMaxBytesUpdateHeight int64) ([]byte, bool) {
-	return blobOracle(height, blobMaxBytesUpdateHeight)
+func CreateBlob(height int64) ([]byte, bool) {
+	return blobOracle(height)
 }
 
-func VerifyBlob(height int64, blob []byte, blobMaxBytesUpdateHeight int64) bool {
+func VerifyBlob(height int64, blob []byte) bool {
 	// The application might have internal checks that ensures a blob is valid.
 	// In this test application, we know what a valid blob should look like.
-	validBlob, exist := blobOracle(height, blobMaxBytesUpdateHeight)
+	validBlob, exist := blobOracle(height)
 	if !exist {
 		// The application received a blob at a height where no blob should be.
 		return len(blob) == 0
@@ -251,13 +250,13 @@ func (app *Application) Info(context.Context, *abci.InfoRequest) (*abci.InfoResp
 
 // Expected to be called with params set.
 func (app *Application) updateBlobMaxBytes(currentHeight int64, params *cmtproto.ConsensusParams) *cmtproto.ConsensusParams {
-	if params == nil {
-		params = &cmtproto.ConsensusParams{}
-	}
 	if app.cfg.BlobMaxBytesUpdateHeight == currentHeight {
 		app.logger.Info("updating blob max bytes on the fly",
 			"current_height", currentHeight,
 			"blob_max_bytes_update_height", app.cfg.BlobMaxBytesUpdateHeight)
+		if params == nil {
+			params = &cmtproto.ConsensusParams{}
+		}
 		params.Blob = &cmtproto.BlobParams{
 			MaxBytes: app.cfg.BlobMaxBytes,
 		}
@@ -392,7 +391,7 @@ func (app *Application) CheckTx(_ context.Context, req *abci.CheckTxRequest) (*a
 // and the blob itself.
 // If query through the network is not possible, it returns with an error.
 func (app *Application) GetBlob(height int64) ([]byte, bool, error) {
-	if !app.checkBlobHeight(height, "getBlob") {
+	if !app.checkBlobEnabled("getBlob") {
 		// Blob max bytes is still 0 so we cannot send a blob
 		return nil, false, nil
 	}
@@ -406,7 +405,7 @@ func (app *Application) GetBlob(height int64) ([]byte, bool, error) {
 	}
 	// If not found, reach out to other peers and retrieve it through them.
 	time.Sleep(100 * time.Millisecond) // Add simulated network delay
-	blobFromPeer, exist := blobOracle(height, app.cfg.BlobMaxBytesUpdateHeight)
+	blobFromPeer, exist := blobOracle(height)
 	if exist && !isBlob(blobFromPeer) {
 		return nil, false, nil
 	}
@@ -440,12 +439,12 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.FinalizeBlock
 	}
 
 	// Verify blob.
-	if app.checkBlobHeight(req.Height, "FinalizeBlock") {
+	if app.checkBlobEnabled("FinalizeBlock") {
 		blob, exists, err := app.GetBlob(req.Height)
 		if err != nil {
 			return nil, fmt.Errorf("could not fetch blob for height %d, %s", req.Height, err.Error())
 		}
-		if exists && !VerifyBlob(req.Height, blob, app.cfg.BlobMaxBytesUpdateHeight) {
+		if exists && !VerifyBlob(req.Height, blob) {
 			return nil, fmt.Errorf("blob verification failed for height %d", req.Height)
 		}
 
@@ -702,8 +701,11 @@ func (app *Application) PrepareProposal(
 	var blob []byte
 	var exists bool
 	// Generate blob for the current height.
-	if app.checkBlobHeight(req.Height, "prepare_proposal") {
-		blob, exists = CreateBlob(req.Height, app.cfg.BlobMaxBytesUpdateHeight)
+	if app.checkBlobEnabled("prepare_proposal") {
+		blob, exists = CreateBlob(req.Height)
+		if len(blob) != 0 {
+			app.logger.Debug("Received blob", "Blob: ", blob[min(len(blob)-1, 10)])
+		}
 	}
 	if app.cfg.PrepareProposalDelay != 0 {
 		time.Sleep(app.cfg.PrepareProposalDelay)
@@ -731,10 +733,10 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.ProcessProp
 		return nil, err
 	}
 
-	if app.checkBlobHeight(req.Height, "ProcessProposal") {
+	if app.checkBlobEnabled("ProcessProposal") {
 		app.logger.Debug("Blob: ", req.Blob)
 
-		if !VerifyBlob(req.Height, req.Blob, app.cfg.BlobMaxBytesUpdateHeight) {
+		if !VerifyBlob(req.Height, req.Blob) {
 			app.logger.Error("invalid blob, rejecting proposal", "received height", req.Height, "received", req.Blob)
 			return &abci.ProcessProposalResponse{
 				Status: abci.PROCESS_PROPOSAL_STATUS_REJECT,
@@ -742,6 +744,7 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.ProcessProp
 		}
 		// Blob verification
 		if len(req.Blob) != 0 {
+			app.logger.Debug("Received blob", "Blob: ", req.Blob[min(len(req.Blob)-1, 10)])
 			// Proposal will be accepted by us and blob exists and valid, so we store it in the cache.
 			app.blobCache[req.Height] = req.Blob
 		} else {
@@ -749,6 +752,9 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.ProcessProp
 			// We make a note of it in the cache so we can inform FinalizeBlock. A real application will have better methods for this.
 			app.blobCache[req.Height] = noBlobBytes()
 		}
+	} else if len(req.Blob) != 0 {
+		app.logger.Error("received a blob when blobs are disabled, rejecting proposal", "received height", req.Height, "received", req.Blob)
+		return &abci.ProcessProposalResponse{Status: abci.PROCESS_PROPOSAL_STATUS_REJECT}, nil
 	}
 
 	_, areExtensionsEnabled := app.checkHeightAndExtensions(true, req.Height, "ProcessProposal")
@@ -820,6 +826,7 @@ func (app *Application) ExtendVote(_ context.Context, req *abci.ExtendVoteReques
 	}
 
 	app.logger.Info("generated vote extension", "height", appHeight, "vote_extension", hex.EncodeToString(ext[:4]), "len", extLen)
+
 	return &abci.ExtendVoteResponse{
 		VoteExtension: ext[:extLen],
 	}, nil
@@ -886,17 +893,7 @@ func (app *Application) getAppHeight() int64 {
 	return appHeight + 1
 }
 
-func (app *Application) checkBlobHeight(height int64, callsite string) bool {
-	appHeight := app.getAppHeight()
-	if height != appHeight {
-		panic(fmt.Errorf(
-			"got unexpected height in %s request; expected %d, actual %d",
-			callsite, appHeight, height,
-		))
-	}
-	if appHeight <= app.cfg.BlobMaxBytesUpdateHeight {
-		return false
-	}
+func (app *Application) checkBlobEnabled(callsite string) bool {
 	blobMaxBytesStr := app.state.Get(prefixReservedKey + suffixBlobMaxBytes)
 	if len(blobMaxBytesStr) == 0 {
 		panic("blob max bytes not set in database")
@@ -1013,6 +1010,7 @@ func (app *Application) verifyAndSum(
 ) (int64, error) {
 	var sum int64
 	var extCount int
+
 	for _, vote := range extCommit.Votes {
 		if vote.BlockIdFlag == cmtproto.BlockIDFlagUnknown || vote.BlockIdFlag > cmtproto.BlockIDFlagAggNilAbsent {
 			return 0, fmt.Errorf("vote with bad blockID flag value at height %d; blockID flag %d", currentHeight, vote.BlockIdFlag)
