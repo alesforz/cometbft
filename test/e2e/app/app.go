@@ -392,7 +392,7 @@ func (app *Application) CheckTx(_ context.Context, req *abci.CheckTxRequest) (*a
 // If query through the network is not possible, it returns with an error.
 func (app *Application) GetBlob(height int64) ([]byte, bool, error) {
 	if !app.checkBlobEnabled("getBlob") {
-		// Blob max bytes is still 0 so we cannot send a blob
+		// Blob max bytes is 0 so we cannot send a blob
 		return nil, false, nil
 	}
 	// First check the local cache
