@@ -551,13 +551,13 @@ func loadPrivValidator(config *cfg.Config) (*privval.FilePV, error) {
 }
 
 func randState(nValidators int) (*State, []*validatorStub) {
-	return randStateWithApp(nValidators, kvstore.NewInMemoryApplication())
+	return randStateWithApp(nValidators, kvstore.NewInMemoryApplication(), false)
 }
 
 func randStateWithBlob(nValidators int) (*State, []*validatorStub) {
 	app := kvstore.NewInMemoryApplication()
 	app.SetGenerateBlobs()
-	return randStateWithApp(nValidators, app)
+	return randStateWithApp(nValidators, app, true)
 }
 
 func randStateWithAppWithHeight(
@@ -569,9 +569,11 @@ func randStateWithAppWithHeight(
 	c.Feature.VoteExtensionsEnableHeight = 0 // disable vote extensions in Berachain
 	return randStateWithAppImpl(nValidators, app, c)
 }
-
-func randStateWithApp(nValidators int, app abci.Application) (*State, []*validatorStub) {
+func randStateWithApp(nValidators int, app abci.Application, blob bool) (*State, []*validatorStub) {
 	c := test.ConsensusParams()
+	if blob {
+		c.Blob.MaxBytes = 100
+	}
 	return randStateWithAppImpl(nValidators, app, c)
 }
 

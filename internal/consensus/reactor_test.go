@@ -458,8 +458,10 @@ func TestReactorRecordsVotesAndBlockPartsAndBlobParts(t *testing.T) {
 // Test we record stats about votes and block parts from other peers.
 func TestReactorRecordsVotesAndBlockParts(t *testing.T) {
 	n := 4
-	css, cleanup := randConsensusNet(t, n, "consensus_reactor_test", newMockTickerFunc(true), newKVStore)
+
+	css, _, _, cleanup := randConsensusNetWithPeers(t, n, n, "consensus_reactor_test", newMockTickerFunc(true), newPersistentKVStoreWithPathAndBlob)
 	defer cleanup()
+
 	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, n)
 	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
