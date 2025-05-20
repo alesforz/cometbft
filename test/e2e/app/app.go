@@ -144,7 +144,7 @@ type Config struct {
 	// 0 denotes it is set at InitChain.
 	PbtsUpdateHeight int64 `toml:"pbts_update_height"`
 
-	// BlobMaxBytes is the values of max bytes for blobs
+	// BlobMaxBytes is the value of max bytes for blobs
 	BlobMaxBytes int64 `toml:"blob_max_bytes"`
 }
 
