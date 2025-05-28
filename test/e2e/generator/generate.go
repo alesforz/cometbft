@@ -16,7 +16,6 @@ import (
 	e2e "github.com/cometbft/cometbft/test/e2e/pkg"
 	"github.com/cometbft/cometbft/types"
 	"github.com/cometbft/cometbft/version"
-
 )
 
 var (
@@ -64,14 +63,14 @@ var (
 		"upgrade": 0.3,
 	}
 	voteExtensionsUpdateHeight = uniformChoice{int64(-1), int64(0), int64(1)} // -1: genesis, 0: InitChain, 1: (use offset)
-	voteExtensionEnabled      = weightedChoice{false: 1}
+	voteExtensionEnabled       = weightedChoice{false: 1}
 	voteExtensionsHeightOffset = uniformChoice{int64(0), int64(10), int64(100)}
 	voteExtensionSize          = uniformChoice{uint(128), uint(512), uint(2048), uint(8192)} // TODO: define the right values depending on experiment results.
 	pbtsUpdateHeight           = uniformChoice{int64(-1)}                                    // -1: genesis, 0: InitChain, 1: (use offset)
 	pbtsEnabled                = weightedChoice{true: 1}
 	pbtsHeightOffset           = uniformChoice{int64(0)}
-	blobMaxBytesUpdateHeight  = uniformChoice{int64(-1), int64(0), int64(1)}
-	blobHeightOffset          = uniformChoice{int64(0), int64(10), int64(100)}
+	blobMaxBytesUpdateHeight   = uniformChoice{int64(-1), int64(0), int64(1)}
+	blobHeightOffset           = uniformChoice{int64(0), int64(10), int64(100)}
 )
 
 type generateConfig struct {

@@ -27,9 +27,6 @@ import (
 	cryptoenc "github.com/cometbft/cometbft/crypto/encoding"
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/libs/protoio"
-	cryptoproto "github.com/cometbft/cometbft/proto/tendermint/crypto"
-	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
-
 	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/cometbft/cometbft/version"
 )
@@ -168,7 +165,6 @@ func DefaultConfig(dir string) *Config {
 // 3 - blob is variable length string that contains "BLOBXXX" where XXX is height multiplied by 0x80 in hex
 // 4 - blob is the size of MaxBlobSizeBytes and contains height truncated into two bytes repeated.
 func blobOracle(height int64, blobMaxBytesUpdateHeight int64) ([]byte, bool) {
-
 	switch height % 4 {
 	case 1:
 		truncatedHeight := byte(height % 0x100)
@@ -252,7 +248,7 @@ func (app *Application) Info(context.Context, *abci.InfoRequest) (*abci.InfoResp
 	}, nil
 }
 
-// Expeected to be called with params set
+// Expeected to be called with params set.
 func (app *Application) updateBlobMaxBytes(currentHeight int64, params *cmtproto.ConsensusParams) *cmtproto.ConsensusParams {
 	if params == nil {
 		params = &cmtproto.ConsensusParams{}
@@ -736,7 +732,6 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.ProcessProp
 
 	if app.checkBlobHeight(req.Height, "ProcessProposal") {
 		app.logger.Debug("Blob: ", req.Blob)
-
 
 		if !VerifyBlob(req.Height, req.Blob, app.cfg.BlobMaxBytesUpdateHeight) {
 			app.logger.Error("invalid blob, rejecting proposal", "received height", req.Height, "received", req.Blob)

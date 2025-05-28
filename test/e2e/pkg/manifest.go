@@ -104,7 +104,7 @@ type Manifest struct {
 
 	// BlobMaxBytes specifies the maximum size in bytes of a blob. This
 	// value will be written to the genesis file of all nodes.
-	//BlobMaxBytes int64 `toml:"blob_max_bytes"`
+	// BlobMaxBytes int64 `toml:"blob_max_bytes"`
 
 	// Defines a minimum size for the vote extensions.
 	VoteExtensionSize uint `toml:"vote_extension_size"`
@@ -126,35 +126,6 @@ type Manifest struct {
 	// Maximum number of peers to which the node gossips transactions
 	ExperimentalMaxGossipConnectionsToPersistentPeers    uint `toml:"experimental_max_gossip_connections_to_persistent_peers"`
 	ExperimentalMaxGossipConnectionsToNonPersistentPeers uint `toml:"experimental_max_gossip_connections_to_non_persistent_peers"`
-
-	// Enable or disable e2e tests for CometBFT's expected behavior with respect
-	// to ABCI.
-	ABCITestsEnabled bool `toml:"abci_tests_enabled"`
-
-	// Default geographical zone ID for simulating latencies, assigned to nodes that don't have a
-	// specific zone assigned.
-	DefaultZone string `toml:"default_zone"`
-
-	// PbtsEnableHeight configures the first height during which
-	// the chain will start using Proposer-Based Timestamps (PBTS)
-	// to create and validate new blocks.
-	PbtsEnableHeight int64 `toml:"pbts_enable_height"`
-
-	// PbtsUpdateHeight configures the height at which consensus
-	// param PbtsEnableHeight will be set.
-	// -1 denotes it is set at genesis.
-	// 0 denotes it is set at InitChain.
-	PbtsUpdateHeight int64 `toml:"pbts_update_height"`
-
-	// Genesis is a set of key-value config entries to write to the
-	// produced genesis file. The format is "key = value".
-	// Example: "consensus_params.evidence.max_bytes = 1024".
-	Genesis []string `toml:"genesis"`
-
-	// Config is a set of key-value config entries to write to CometBFT's
-	// configuration files for all nodes. The format is "key = value".
-	// Example: "p2p.send_rate = 512000".
-	Config []string `toml:"config"`
 
 	// Enable or disable e2e tests for CometBFT's expected behavior with respect
 	// to ABCI.

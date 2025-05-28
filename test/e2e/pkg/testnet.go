@@ -72,17 +72,17 @@ const (
 type Testnet struct {
 	Manifest
 
-	Name                                                 string
-	File                                                 string
-	Dir                                                  string
-	IP                                                   *net.IPNet
-	InitialHeight                                        int64
-	InitialState                                         map[string]string
-	Validators                                           map[*Node]int64
-	ValidatorUpdates                                     map[int64]map[*Node]int64
-	Nodes                                                []*Node
-	BlobMaxBytesUpdateHeight                             int64
-	BlobMaxBytes                                         int64
+	Name                     string
+	File                     string
+	Dir                      string
+	IP                       *net.IPNet
+	InitialHeight            int64
+	InitialState             map[string]string
+	Validators               map[*Node]int64
+	ValidatorUpdates         map[int64]map[*Node]int64
+	Nodes                    []*Node
+	BlobMaxBytesUpdateHeight int64
+	BlobMaxBytes             int64
 
 	// Latency Emulation is enabled when all the nodes have a zone assigned.
 	LatencyEmulationEnabled bool
@@ -143,14 +143,14 @@ func NewTestnetFromManifest(manifest Manifest, file string, ifd InfrastructureDa
 	}
 
 	testnet := &Testnet{
-		Manifest:				 manifest,
-		Name:                       filepath.Base(dir),
-		File:                       file,
-		Dir:                        dir,
-		IP:                         ipNet,
-		Validators:                 map[*Node]int64{},
-		ValidatorUpdates:           map[int64]map[*Node]int64{},
-		Nodes:                      []*Node{},
+		Manifest:                 manifest,
+		Name:                     filepath.Base(dir),
+		File:                     file,
+		Dir:                      dir,
+		IP:                       ipNet,
+		Validators:               map[*Node]int64{},
+		ValidatorUpdates:         map[int64]map[*Node]int64{},
+		Nodes:                    []*Node{},
 		BlobMaxBytesUpdateHeight: manifest.BlobMaxBytesUpdateHeight,
 	}
 
