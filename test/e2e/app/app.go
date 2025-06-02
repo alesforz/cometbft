@@ -893,7 +893,7 @@ func (app *Application) getAppHeight() int64 {
 	return appHeight + 1
 }
 
-func (app *Application) checkBlobEnabled(callsite string) bool {
+func (app *Application) checkBlobEnabled(_ string) bool {
 	blobMaxBytesStr := app.state.Get(prefixReservedKey + suffixBlobMaxBytes)
 	if len(blobMaxBytesStr) == 0 {
 		panic("blob max bytes not set in database")
