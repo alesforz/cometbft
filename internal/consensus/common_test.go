@@ -963,9 +963,10 @@ func randConsensusNetWithPeers(
 		if i < nValidators {
 			privVal = privVals[i]
 		} else {
-			tempKeyFile, err := os.CreateTemp(t.TempDir(), "priv_validator_key_")
+			dir := t.TempDir()
+			tempKeyFile, err := os.CreateTemp(dir, "priv_validator_key_")
 			require.NoError(t, err)
-			tempStateFile, err := os.CreateTemp(t.TempDir(), "priv_validator_state_")
+			tempStateFile, err := os.CreateTemp(dir, "priv_validator_state_")
 			require.NoError(t, err)
 			privVal, err = privval.GenFilePV(tempKeyFile.Name(), tempStateFile.Name(), nil)
 			require.NoError(t, err)
