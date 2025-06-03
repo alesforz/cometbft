@@ -569,6 +569,7 @@ func randStateWithAppWithHeight(
 	c.Feature.VoteExtensionsEnableHeight = 0 // disable vote extensions in Berachain
 	return randStateWithAppImpl(nValidators, app, c)
 }
+
 func randStateWithApp(nValidators int, app abci.Application, blob bool) (*State, []*validatorStub) {
 	c := test.ConsensusParams()
 	if blob {
