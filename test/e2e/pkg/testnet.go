@@ -82,7 +82,6 @@ type Testnet struct {
 	Nodes            []*Node
 
 	BlobMaxBytesUpdateHeight int64
-	BlobMaxBytes             int64
 
 	// Latency Emulation is enabled when all the nodes have a zone assigned.
 	LatencyEmulationEnabled bool
