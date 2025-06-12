@@ -72,15 +72,15 @@ const (
 type Testnet struct {
 	Manifest
 
-	Name                     string
-	File                     string
-	Dir                      string
-	IP                       *net.IPNet
-	InitialHeight            int64
-	InitialState             map[string]string
-	Validators               map[*Node]int64
-	ValidatorUpdates         map[int64]map[*Node]int64
-	Nodes                    []*Node
+	Name string
+	File string
+	Dir  string
+
+	IP               *net.IPNet
+	Validators       map[*Node]int64
+	ValidatorUpdates map[int64]map[*Node]int64
+	Nodes            []*Node
+
 	BlobMaxBytesUpdateHeight int64
 	BlobMaxBytes             int64
 
