@@ -551,13 +551,13 @@ func loadPrivValidator(config *cfg.Config) (*privval.FilePV, error) {
 }
 
 func randState(nValidators int) (*State, []*validatorStub) {
-	return randStateWithApp(nValidators, kvstore.NewInMemoryApplication())
+	return randStateWithApp(nValidators, kvstore.NewInMemoryApplication(), false)
 }
 
 func randStateWithBlob(nValidators int) (*State, []*validatorStub) {
 	app := kvstore.NewInMemoryApplication()
 	app.SetGenerateBlobs()
-	return randStateWithApp(nValidators, app)
+	return randStateWithApp(nValidators, app, true)
 }
 
 func randStateWithAppWithHeight(
@@ -570,8 +570,11 @@ func randStateWithAppWithHeight(
 	return randStateWithAppImpl(nValidators, app, c)
 }
 
-func randStateWithApp(nValidators int, app abci.Application) (*State, []*validatorStub) {
+func randStateWithApp(nValidators int, app abci.Application, blob bool) (*State, []*validatorStub) {
 	c := test.ConsensusParams()
+	if blob {
+		c.Blob.MaxBytes = 100
+	}
 	return randStateWithAppImpl(nValidators, app, c)
 }
 
@@ -936,35 +939,56 @@ func randConsensusNetWithPeers(
 	appFunc func(string) abci.Application,
 ) ([]*State, *types.GenesisDoc, *cfg.Config, cleanupFunc) {
 	t.Helper()
-	c := test.ConsensusParams()
-	genDoc, privVals := randGenesisDoc(nValidators, testMinPower, c, cmttime.Now())
-	css := make([]*State, nPeers)
-	logger := consensusLogger()
-	var peer0Config *cfg.Config
-	configRootDirs := make([]string, 0, nPeers)
+
+	var (
+		c                = test.ConsensusParams()
+		genDoc, privVals = randGenesisDoc(
+			nValidators,
+			testMinPower,
+			c,
+			cmttime.Now(),
+		)
+		css            = make([]*State, nPeers)
+		logger         = consensusLogger()
+		peer0Config    *cfg.Config
+		configRootDirs = make([]string, 0, nPeers)
+	)
 	for i := 0; i < nPeers; i++ {
 		stateDB := dbm.NewMemDB() // each state needs its own db
 		stateStore := sm.NewStore(stateDB, sm.StoreOptions{
 			DiscardABCIResponses: false,
 		})
 		t.Cleanup(func() { _ = stateStore.Close() })
+
 		state, err := stateStore.LoadFromDBOrGenesisDoc(genDoc)
 		require.NoError(t, err)
+
 		thisConfig := ResetConfig(fmt.Sprintf("%s_%d", testName, i))
+
 		configRootDirs = append(configRootDirs, thisConfig.RootDir)
 		ensureDir(filepath.Dir(thisConfig.Consensus.WalFile())) // dir for wal
+
 		if i == 0 {
 			peer0Config = thisConfig
 		}
+
 		var privVal types.PrivValidator
 		if i < nValidators {
 			privVal = privVals[i]
 		} else {
-			tempKeyFile, err := os.CreateTemp("", "priv_validator_key_")
+			dir := t.TempDir()
+
+			tempKeyFile, err := os.CreateTemp(dir, "priv_validator_key_")
 			require.NoError(t, err)
-			tempStateFile, err := os.CreateTemp("", "priv_validator_state_")
+
+			tempStateFile, err := os.CreateTemp(dir, "priv_validator_state_")
 			require.NoError(t, err)
-			privVal, err = privval.GenFilePV(tempKeyFile.Name(), tempStateFile.Name(), nil)
+
+			privVal, err = privval.GenFilePV(
+				tempKeyFile.Name(),
+				tempStateFile.Name(),
+				nil,
+			)
 			require.NoError(t, err)
 		}
 
@@ -974,18 +998,25 @@ func randConsensusNetWithPeers(
 			// simulate handshake, receive app version. If don't do this, replay test will fail
 			state.Version.Consensus.App = kvstore.AppVersion
 		}
-		_, err = app.InitChain(context.Background(), &abci.InitChainRequest{Validators: vals})
+
+		_, err = app.InitChain(
+			context.Background(),
+			&abci.InitChainRequest{Validators: vals},
+		)
 		require.NoError(t, err)
 
 		css[i] = newStateWithConfig(thisConfig, state, privVal, app)
 		css[i].SetTimeoutTicker(tickerFunc())
 		css[i].SetLogger(logger.With("validator", i, "module", "consensus"))
 	}
-	return css, genDoc, peer0Config, func() {
+
+	cleanup := func() {
 		for _, dir := range configRootDirs {
 			os.RemoveAll(dir)
 		}
 	}
+
+	return css, genDoc, peer0Config, cleanup
 }
 
 func getSwitchIndex(switches []*p2p.Switch, peer p2p.Peer) int {

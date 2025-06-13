@@ -81,6 +81,8 @@ type Testnet struct {
 	ValidatorUpdates map[int64]map[*Node]int64
 	Nodes            []*Node
 
+	BlobMaxBytesUpdateHeight int64
+
 	// Latency Emulation is enabled when all the nodes have a zone assigned.
 	LatencyEmulationEnabled bool
 }
@@ -140,17 +142,17 @@ func NewTestnetFromManifest(manifest Manifest, file string, ifd InfrastructureDa
 	}
 
 	testnet := &Testnet{
-		Manifest: manifest,
-
-		Name: filepath.Base(dir),
-		File: file,
-		Dir:  dir,
-
-		IP:               ipNet,
-		Validators:       map[*Node]int64{},
-		ValidatorUpdates: map[int64]map[*Node]int64{},
-		Nodes:            []*Node{},
+		Manifest:                 manifest,
+		Name:                     filepath.Base(dir),
+		File:                     file,
+		Dir:                      dir,
+		IP:                       ipNet,
+		Validators:               map[*Node]int64{},
+		ValidatorUpdates:         map[int64]map[*Node]int64{},
+		Nodes:                    []*Node{},
+		BlobMaxBytesUpdateHeight: manifest.BlobMaxBytesUpdateHeight,
 	}
+
 	if testnet.InitialHeight == 0 {
 		testnet.InitialHeight = 1
 	}
@@ -341,6 +343,9 @@ func (t Testnet) Validate() error {
 	if t.BlobMaxBytes > types.MaxBlobSizeBytes {
 		return fmt.Errorf("value of BlobMaxBytes cannot be higher than %d", types.MaxBlobSizeBytes)
 	}
+	if t.BlobMaxBytes < 0 {
+		return fmt.Errorf("value of BlobMaxBytes cannot be less than 0: %d", types.MaxBlobSizeBytes)
+	}
 	if t.VoteExtensionsUpdateHeight < -1 {
 		return fmt.Errorf("value of VoteExtensionsUpdateHeight must be positive, 0 (InitChain), "+
 			"or -1 (Genesis); update height %d", t.VoteExtensionsUpdateHeight)
@@ -371,6 +376,18 @@ func (t Testnet) Validate() error {
 				t.VoteExtensionsUpdateHeight, t.VoteExtensionsEnableHeight,
 			)
 		}
+	}
+	if t.BlobMaxBytesUpdateHeight < -1 {
+		return fmt.Errorf("value of BlobMaxBytesUpdateHeight must be positive, 0 (InitChain), "+
+			"or -1 (Genesis); update height %d", t.BlobMaxBytesUpdateHeight)
+	}
+
+	if t.BlobMaxBytesUpdateHeight > 0 && t.BlobMaxBytesUpdateHeight < t.InitialHeight {
+		return fmt.Errorf("a value of BlobMaxBytesUpdateHeight greater than 0 "+
+			"must not be less than InitialHeight; "+
+			"update height %d, initial height %d",
+			t.BlobMaxBytesUpdateHeight, t.InitialHeight,
+		)
 	}
 	if t.PbtsEnableHeight < 0 {
 		return fmt.Errorf("value of PbtsEnableHeight must be positive, or 0 (disable); "+
