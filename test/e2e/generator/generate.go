@@ -188,9 +188,10 @@ func generateTestnet(r *rand.Rand, opt map[string]any, upgradeVersion string, pr
 		manifest.BlobMaxBytes = types.MaxBlobSizeBytes
 	}
 
-	if manifest.BlobMaxBytesUpdateHeight == 0 {
+	if manifest.BlobMaxBytesUpdateHeight <= 0 {
 		manifest.BlobMaxBytes = types.MaxBlobSizeBytes
 	}
+
 	var numSeeds, numValidators, numFulls, numLightClients int
 	switch opt["topology"].(string) {
 	case "single":
